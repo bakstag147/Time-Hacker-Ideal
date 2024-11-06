@@ -61,29 +61,41 @@ struct MainMenuView: View {
     @State private var showAboutGame = false
     
     var body: some View {
-        VStack(spacing: 30) {
-            Text("Time Hacker")
-                .font(.system(size: 40, weight: .bold))
-                .foregroundColor(.blue)
+        ZStack {
+            Image("bgmenu")
+                .resizable()
+                .scaledToFill()
+                .edgesIgnoringSafeArea(.all)
             
-            VStack(spacing: 16) {
-                Button(action: startGame) {
-                    MenuButton(title: "Начать игру", systemImage: "play.fill")
-                }
+            Color.black.opacity(0.3)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 30) {
+                Image("logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 500)
+                    .shadow(color: .black.opacity(0.5), radius: 10)
                 
-                Button(action: { showLevelSelect = true }) {
-                    MenuButton(title: "Выбрать уровень", systemImage: "list.number")
-                }
-                
-                Button(action: { showAboutGame = true }) {
-                    MenuButton(title: "Об игре", systemImage: "info.circle")
+                VStack(spacing: 16) {
+                    Button(action: startGame) {
+                        MenuButton(title: "Начать игру", systemImage: "play.fill")
+                    }
+                    
+                    Button(action: { showLevelSelect = true }) {
+                        MenuButton(title: "Выбрать уровень", systemImage: "list.number")
+                    }
+                    
+                    Button(action: { showAboutGame = true }) {
+                        MenuButton(title: "Об игре", systemImage: "info.circle")
+                    }
                 }
             }
+            .padding()
         }
-        .padding()
         .sheet(isPresented: $showLevelSelect) {
             LevelSelectView(
-                levelManager: levelManager,  // передаем levelManager
+                levelManager: levelManager,
                 startGame: selectLevel
             )
         }
@@ -144,16 +156,39 @@ struct MenuButton: View {
     var body: some View {
         HStack {
             Image(systemName: systemImage)
-                .font(.title2)
+                .font(.title3)
             Text(title)
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(.title3)
+                .fontWeight(.medium)
         }
         .foregroundColor(.white)
-        .frame(width: 250)
-        .padding()
-        .background(Color.blue)
-        .cornerRadius(15)
+        .frame(width: 280)
+        .padding(.vertical, 14)
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.blue.opacity(0.3),
+                    Color.blue.opacity(0.2)
+                ]),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.white.opacity(0.3),
+                            Color.white.opacity(0.1)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .cornerRadius(12)
     }
 }
 
@@ -175,7 +210,7 @@ struct LevelSelectView: View {
                 
                 ScrollView {
                     VStack(alignment: .leading) {
-                        Text("Time Hacker")
+                        Text("Выбор уровня")
                             .font(.system(size: 40, weight: .bold))
                             .foregroundColor(.white)
                             .padding(.horizontal)
