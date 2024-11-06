@@ -1,15 +1,17 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var levelManager = LevelManager()
     @State private var showGame = false
     @State private var startLevel = 1
     
     var body: some View {
-        Group {
+        ZStack {  // Заменяем Group на ZStack
             if showGame {
-                GameView(startingLevel: startLevel)
+                GameView(startingLevel: startLevel, levelManager: levelManager)
             } else {
                 MainMenuView(
+                    levelManager: levelManager,
                     startGame: {
                         startLevel = 1
                         showGame = true
@@ -25,6 +27,7 @@ struct ContentView: View {
 }
 
 struct MainMenuView: View {
+    @ObservedObject var levelManager: LevelManager
     let startGame: () -> Void
     let selectLevel: (Int) -> Void
     @State private var showLevelSelect = false
@@ -52,7 +55,10 @@ struct MainMenuView: View {
         }
         .padding()
         .sheet(isPresented: $showLevelSelect) {
-            LevelSelectView(startGame: selectLevel)
+            LevelSelectView(
+                levelManager: levelManager,  // передаем levelManager
+                startGame: selectLevel
+            )
         }
         .sheet(isPresented: $showAboutGame) {
             AboutGameView()
@@ -126,6 +132,7 @@ struct MenuButton: View {
 
 struct LevelSelectView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var levelManager: LevelManager
     let startGame: (Int) -> Void
     
     var body: some View {
@@ -133,13 +140,16 @@ struct LevelSelectView: View {
             List {
                 ForEach(1...10, id: \.self) { level in
                     Button(action: {
-                        startGame(level)
-                        dismiss()
+                        if levelManager.isLevelUnlocked(level) {
+                            startGame(level)
+                            dismiss()
+                        }
                     }) {
                         HStack {
-                            Image(systemName: "\(level).circle.fill")
+                            Image(systemName: levelManager.isLevelUnlocked(level) ?
+                                  "\(level).circle.fill" : "lock.circle.fill")
                                 .font(.title2)
-                                .foregroundColor(.blue)
+                                .foregroundColor(levelManager.isLevelUnlocked(level) ? .blue : .gray)
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Уровень \(level)")
@@ -152,11 +162,15 @@ struct LevelSelectView: View {
                             
                             Spacer()
                             
-                            Image(systemName: "chevron.right")
-                                .foregroundColor(.gray)
+                            if levelManager.isLevelUnlocked(level) {
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.gray)
+                            }
                         }
                         .padding(.vertical, 8)
+                        .opacity(levelManager.isLevelUnlocked(level) ? 1 : 0.6)
                     }
+                    .disabled(!levelManager.isLevelUnlocked(level))
                 }
             }
             .navigationTitle("Выбор уровня")
@@ -364,17 +378,37 @@ class AnthropicService {
     }
 }
 
-// MARK: - Managers
 class LevelManager: ObservableObject {
     @Published var currentLevel = 1
     @Published var showLevelCompleteAlert = false
     @Published var errorMessage: String?
     @Published var showStatistics = false
     @Published var gameStatistics = GameStatistics()
+    // Добавляем новое свойство:
+    @Published var levelProgress: LevelProgress
     
     private var currentLevelStartTime = Date()
     private var currentMessagesCount = 0
     private var currentCharactersCount = 0
+    
+    // Обновляем инициализатор
+    init() {
+        self.levelProgress = LevelProgress.load()
+    }
+    
+    // Добавляем новые методы
+    func unlockNextLevel() {
+        let nextLevel = currentLevel + 1
+        if nextLevel <= 10 {
+            levelProgress.unlockedLevels.insert(nextLevel)
+            levelProgress.save()
+            objectWillChange.send()
+        }
+    }
+    
+    func isLevelUnlocked(_ level: Int) -> Bool {
+        return levelProgress.unlockedLevels.contains(level)
+    }
     
     private let levels: [Int: LevelContent] = [
         1: LevelContent(
@@ -917,14 +951,19 @@ struct StatRow: View {
 }
 
 struct GameView: View {
-    @StateObject private var levelManager = LevelManager()
+    @ObservedObject var levelManager: LevelManager
     @StateObject private var chatContext = ChatContextManager()
     @State private var messageText: String = ""
     @State private var uiMessages: [Message] = []
     @State private var isLoading: Bool = false
     
-    private let anthropicService = AnthropicService()
+    private let anthropicService = AnthropicService()  // Добавляем сервис
     let startingLevel: Int
+    
+    init(startingLevel: Int, levelManager: LevelManager) {
+        self.startingLevel = startingLevel
+        _levelManager = ObservedObject(wrappedValue: levelManager)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1117,6 +1156,7 @@ struct GameView: View {
     
     private func startNextLevel() {
         levelManager.completedLevel()
+        levelManager.unlockNextLevel()  // Добавляем разблокировку следующего уровня
         levelManager.nextLevel()
         chatContext.clearContext()
         loadInitialMessage()
