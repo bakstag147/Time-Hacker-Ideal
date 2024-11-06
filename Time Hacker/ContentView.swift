@@ -2,16 +2,23 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var showGame = false
+    @State private var startLevel = 1
     
     var body: some View {
         Group {
             if showGame {
-                GameView()  // Убираем параметры
+                GameView(startingLevel: startLevel)
             } else {
-                MainMenuView(startGame: {
-                    showGame = true
-                    // Инициализация начального состояния будет происходить в GameView.onAppear
-                })
+                MainMenuView(
+                    startGame: {
+                        startLevel = 1
+                        showGame = true
+                    },
+                    selectLevel: { selectedLevel in
+                        startLevel = selectedLevel
+                        showGame = true
+                    }
+                )
             }
         }
     }
@@ -19,6 +26,9 @@ struct ContentView: View {
 
 struct MainMenuView: View {
     let startGame: () -> Void
+    let selectLevel: (Int) -> Void
+    @State private var showLevelSelect = false
+    @State private var showAboutGame = false
     
     var body: some View {
         VStack(spacing: 30) {
@@ -28,35 +38,151 @@ struct MainMenuView: View {
             
             VStack(spacing: 16) {
                 Button(action: startGame) {
-                    Text("Начать игру")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(width: 250)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(15)
+                    MenuButton(title: "Начать игру", systemImage: "play.fill")
                 }
                 
-                Button(action: {
-                    // Добавим позже
-                }) {
-                    Text("Об игре")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.blue)
-                        .frame(width: 250)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 15)
-                                .stroke(Color.blue, lineWidth: 2)
-                        )
+                Button(action: { showLevelSelect = true }) {
+                    MenuButton(title: "Выбрать уровень", systemImage: "list.number")
+                }
+                
+                Button(action: { showAboutGame = true }) {
+                    MenuButton(title: "Об игре", systemImage: "info.circle")
                 }
             }
         }
         .padding()
+        .sheet(isPresented: $showLevelSelect) {
+            LevelSelectView(startGame: selectLevel)
+        }
+        .sheet(isPresented: $showAboutGame) {
+            AboutGameView()
+        }
     }
 }
+
+struct AboutGameView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("О Time Hacker")
+                        .font(.title)
+                        .bold()
+                    
+                    Group {
+                        Text("Описание")
+                            .font(.headline)
+                        Text("Time Hacker - это игра о социальной инженерии и искусстве убеждения. Путешествуйте через разные эпохи, используя навыки коммуникации для достижения своих целей.")
+                    }
+                    
+                    Group {
+                        Text("Как играть")
+                            .font(.headline)
+                        Text("• Каждый уровень представляет собой диалог с персонажем из определенной эпохи\n• Используйте убеждение, знания и хитрость, чтобы достичь цели\n• Внимательно читайте описание ситуации и реакции персонажа\n• Победите, найдя правильный подход к каждому собеседнику")
+                    }
+                    
+                    Group {
+                        Text("Уровни")
+                            .font(.headline)
+                        Text("Игра содержит 10 уровней, каждый в своей исторической эпохе:\n1. Заря Человечества\n2. Древний Египет\n3. Древняя Греция\n4. Римская Империя\n5. Средневековый Китай\n6. Средневековая Европа\n7. Эпоха Возрождения\n8. Эпоха Просвещения\n9. Индустриальная Эпоха\n10. Современность")
+                    }
+                    
+                    Group {
+                        Text("Разработчики")
+                            .font(.headline)
+                        Text("Создано с ❤️ для всех любителей истории и социальной инженерии")
+                    }
+                }
+                .padding()
+            }
+            .navigationBarItems(trailing: Button("Закрыть") {
+                dismiss()
+            })
+        }
+    }
+}
+
+struct MenuButton: View {
+    let title: String
+    let systemImage: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: systemImage)
+                .font(.title2)
+            Text(title)
+                .font(.title2)
+                .fontWeight(.semibold)
+        }
+        .foregroundColor(.white)
+        .frame(width: 250)
+        .padding()
+        .background(Color.blue)
+        .cornerRadius(15)
+    }
+}
+
+struct LevelSelectView: View {
+    @Environment(\.dismiss) private var dismiss
+    let startGame: (Int) -> Void
+    
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(1...10, id: \.self) { level in
+                    Button(action: {
+                        startGame(level)
+                        dismiss()
+                    }) {
+                        HStack {
+                            Image(systemName: "\(level).circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.blue)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Уровень \(level)")
+                                    .font(.headline)
+                                
+                                Text(getLevelTitle(level))
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+            }
+            .navigationTitle("Выбор уровня")
+            .navigationBarItems(trailing: Button("Закрыть") {
+                dismiss()
+            })
+        }
+    }
+    
+    private func getLevelTitle(_ level: Int) -> String {
+        switch level {
+        case 1: return "Заря Человечества"
+        case 2: return "Древний Египет"
+        case 3: return "Древняя Греция"
+        case 4: return "Римская Империя"
+        case 5: return "Средневековый Китай"
+        case 6: return "Средневековая Европа"
+        case 7: return "Эпоха Возрождения"
+        case 8: return "Эпоха Просвещения"
+        case 9: return "Индустриальная Эпоха"
+        case 10: return "Современность"
+        default: return ""
+        }
+    }
+}
+
 // MARK: - Models
 enum MessageType {
     case message
@@ -798,6 +924,7 @@ struct GameView: View {
     @State private var isLoading: Bool = false
     
     private let anthropicService = AnthropicService()
+    let startingLevel: Int
     
     var body: some View {
         VStack(spacing: 0) {
@@ -903,6 +1030,7 @@ struct GameView: View {
             StatisticsView(statistics: levelManager.gameStatistics, levelManager: levelManager)
         }
         .onAppear {
+            levelManager.loadLevel(startingLevel)
             loadInitialMessage()
         }
     }
