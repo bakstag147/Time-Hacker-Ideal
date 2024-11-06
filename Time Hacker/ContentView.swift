@@ -1,5 +1,62 @@
 import SwiftUI
 
+struct ContentView: View {
+    @State private var showGame = false
+    
+    var body: some View {
+        Group {
+            if showGame {
+                GameView()  // Убираем параметры
+            } else {
+                MainMenuView(startGame: {
+                    showGame = true
+                    // Инициализация начального состояния будет происходить в GameView.onAppear
+                })
+            }
+        }
+    }
+}
+
+struct MainMenuView: View {
+    let startGame: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 30) {
+            Text("Time Hacker")
+                .font(.system(size: 40, weight: .bold))
+                .foregroundColor(.blue)
+            
+            VStack(spacing: 16) {
+                Button(action: startGame) {
+                    Text("Начать игру")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(width: 250)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(15)
+                }
+                
+                Button(action: {
+                    // Добавим позже
+                }) {
+                    Text("Об игре")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                        .frame(width: 250)
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 15)
+                                .stroke(Color.blue, lineWidth: 2)
+                        )
+                }
+            }
+        }
+        .padding()
+    }
+}
 // MARK: - Models
 enum MessageType {
     case message
@@ -733,12 +790,12 @@ struct StatRow: View {
     }
 }
 
-struct ContentView: View {
+struct GameView: View {
     @StateObject private var levelManager = LevelManager()
     @StateObject private var chatContext = ChatContextManager()
-    @State private var messageText = ""
+    @State private var messageText: String = ""
     @State private var uiMessages: [Message] = []
-    @State private var isLoading = false
+    @State private var isLoading: Bool = false
     
     private let anthropicService = AnthropicService()
     
@@ -766,7 +823,6 @@ struct ContentView: View {
             .padding()
             .background(Color(uiColor: .systemBackground))
             .shadow(radius: 1)
-            
             // Main scroll view containing both image and messages
             ScrollViewReader { proxy in
                 ScrollView {
@@ -804,21 +860,20 @@ struct ContentView: View {
                     }
                     .padding()
                 }
-                .onChange(of: uiMessages, initial: false) { oldValue, newValue in
-                    if let lastMessage = newValue.last {
+                .onChange(of: uiMessages) { _, _ in
+                    if let lastMessage = uiMessages.last {
                         withAnimation {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
                     }
                 }
             }
-            
             // Bottom input field
             HStack(spacing: 12) {
                 TextField("Введите сообщение...", text: $messageText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                 
-                Button(action: { Task { await sendMessage() } }) {
+                Button(action: { sendMessage() }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 32))
                         .foregroundColor(.blue)
@@ -851,7 +906,6 @@ struct ContentView: View {
             loadInitialMessage()
         }
     }
-    
     private func loadInitialMessage() {
         guard let level = levelManager.currentLevelContent else {
             uiMessages = [Message(content: "Ошибка загрузки уровня", isUser: false, type: .status)]
@@ -869,67 +923,68 @@ struct ContentView: View {
         chatContext.addMessage(ChatMessage(role: .system, content: level.prompt))
     }
     
-    private func sendMessage() async {
-        let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedMessage.isEmpty else { return }
-        
-        levelManager.recordMessage(trimmedMessage)
-        
-        let userMessage = Message(content: trimmedMessage, isUser: true, type: .message)
-        uiMessages.append(userMessage)
-        messageText = ""
-        
-        if levelManager.checkLevelComplete(message: trimmedMessage) {
-            levelManager.showLevelCompleteAlert = true
-            return
-        }
-        
-        chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
-        
-        isLoading = true
-        
-        do {
-            let response = try await anthropicService.sendMessage(messages: chatContext.getFormattedContext())
+    private func sendMessage() {
+        Task {
+            let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedMessage.isEmpty else { return }
             
-            let components = response.components(separatedBy: "*")
-            for (index, component) in components.enumerated() {
-                let trimmedComponent = component.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmedComponent.isEmpty {
-                    if index % 2 == 1 {
-                        uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .status))
-                    } else {
-                        uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .message))
-                        
-                        if levelManager.checkVictoryInResponse(response: trimmedComponent) {
-                            if let victoryMessage = levelManager.currentLevelContent?.victoryMessage {
-                                uiMessages.append(Message(content: victoryMessage, isUser: false, type: .status))
-                                uiMessages.append(Message(
-                                    content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
-                                    isUser: false,
-                                    type: .victory
-                                ))
+            levelManager.recordMessage(trimmedMessage)
+            
+            let userMessage = Message(content: trimmedMessage, isUser: true, type: .message)
+            uiMessages.append(userMessage)
+            messageText = ""
+            
+            if levelManager.checkLevelComplete(message: trimmedMessage) {
+                levelManager.showLevelCompleteAlert = true
+                return
+            }
+            
+            chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
+            
+            isLoading = true
+            do {
+                let response = try await anthropicService.sendMessage(messages: chatContext.getFormattedContext())
+                
+                let components = response.components(separatedBy: "*")
+                for (index, component) in components.enumerated() {
+                    let trimmedComponent = component.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedComponent.isEmpty {
+                        if index % 2 == 1 {
+                            uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .status))
+                        } else {
+                            uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .message))
+                            
+                            if levelManager.checkVictoryInResponse(response: trimmedComponent) {
+                                if let victoryMessage = levelManager.currentLevelContent?.victoryMessage {
+                                    uiMessages.append(Message(content: victoryMessage, isUser: false, type: .status))
+                                    uiMessages.append(Message(
+                                        content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
+                                        isUser: false,
+                                        type: .victory
+                                    ))
+                                }
+                                break
                             }
-                            break
                         }
                     }
                 }
+                
+                chatContext.addMessage(ChatMessage(role: .assistant, content: response))
+            } catch let error as AnthropicError {
+                switch error {
+                case .apiError(let message):
+                    levelManager.errorMessage = "Ошибка API: \(message)"
+                case .networkError(_):
+                    levelManager.errorMessage = "Ошибка сети. Проверьте подключение к интернету."
+                case .invalidResponse:
+                    levelManager.errorMessage = "Неверный ответ от сервера."
+                }
+            } catch {
+                levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
             }
             
-            chatContext.addMessage(ChatMessage(role: .assistant, content: response))
-        } catch let error as AnthropicError {
-            switch error {
-            case .apiError(let message):
-                levelManager.errorMessage = "Ошибка API: \(message)"
-            case .networkError(_):
-                levelManager.errorMessage = "Ошибка сети. Проверьте подключение к интернету."
-            case .invalidResponse:
-                levelManager.errorMessage = "Неверный ответ от сервера."
-            }
-        } catch {
-            levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
+            isLoading = false
         }
-        
-        isLoading = false
     }
     
     private func startNextLevel() {
@@ -939,6 +994,11 @@ struct ContentView: View {
         loadInitialMessage()
     }
 }
+
+
+
+
+
 
 struct MessageBubble: View {
     let message: Message
