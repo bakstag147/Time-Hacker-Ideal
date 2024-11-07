@@ -692,33 +692,25 @@ struct StatisticsView: View {
     @ObservedObject var levelManager: LevelManager
     @Binding var showGame: Bool
     @State private var showingRestartAlert = false
+    @State private var showingShareSheet = false
     
     private var shareText: String {
-        """
-        🎮 Time Hacker - Статистика прохождения:
+        var text = "🎮 Time Hacker - Мои лучшие результаты:\n\n"
         
-        ⏱️ Общее время: \(formatTime(statistics.totalTimeSpent))
+        // Добавляем информацию о лучших прохождениях
+        let sortedBestStats = statistics.bestLevelStats.sorted { $0.key < $1.key }
+        
+        text += """
+        
+        📊 Моё лучшее прхождение:
+        ⏱️ Общее время игры: \(formatTime(statistics.totalTimeSpent))
         💬 Всего сообщений: \(statistics.totalMessages)
         📝 Всего символов: \(statistics.totalCharacters)
         
-        Лучшее время по уровням:
-        \(bestLevelStatsText)
-        
-        Попробуй свои навыки социальной инженерии! 🕵️‍♂️
+        🎯 Попробуй лучше в Time Hacker!
         """
-    }
-    
-    private var bestLevelStatsText: String {
-        statistics.bestLevelStats.sorted { $0.key < $1.key }
-            .map { level, stats in
-                """
-                
-                Уровень \(level):
-                ⏱️ Время: \(formatTime(stats.timeSpent))
-                💬 Сообщений: \(stats.messagesCount)
-                """
-            }
-            .joined()
+        
+        return text
     }
     
     var body: some View {
@@ -754,7 +746,7 @@ struct StatisticsView: View {
                 }
                 
                 Section {
-                    Button(action: shareStats) {
+                    Button(action: { showingShareSheet = true }) {
                         HStack {
                             Image(systemName: "square.and.arrow.up")
                             Text("Поделиться результатами")
@@ -785,6 +777,9 @@ struct StatisticsView: View {
             } message: {
                 Text("Вы уверены, что хотите начать игру сначала? Весь прогресс будет потерян.")
             }
+            .sheet(isPresented: $showingShareSheet) {
+                ShareSheet(activityItems: [shareText])
+            }
         }
     }
     
@@ -801,25 +796,25 @@ struct StatisticsView: View {
         return formatter.string(from: date)
     }
     
-    private func shareStats() {
-        let activityVC = UIActivityViewController(
-            activityItems: [shareText],
-            applicationActivities: nil
-        )
-        
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first,
-           let rootVC = window.rootViewController {
-            activityVC.popoverPresentationController?.sourceView = rootVC.view
-            rootVC.present(activityVC, animated: true)
-        }
-    }
-    
     private func restartGame() {
         levelManager.resetGame()
         showGame = false
         dismiss()
     }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 struct StatRow: View {
@@ -835,7 +830,6 @@ struct StatRow: View {
         }
     }
 }
-
 
 
 struct GameView: View {
