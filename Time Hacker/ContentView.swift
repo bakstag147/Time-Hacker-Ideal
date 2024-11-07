@@ -79,7 +79,7 @@ struct MainMenuView: View {
                 
                 VStack(spacing: 16) {
                     Button(action: startGame) {
-                        MenuButton(title: "Начать игру", systemImage: "play.fill")
+                        MenuButton(title: " Начать игру", systemImage: "play.fill")
                     }
                     
                     Button(action: { showLevelSelect = true }) {
@@ -158,8 +158,7 @@ struct MenuButton: View {
             Image(systemName: systemImage)
                 .font(.title3)
             Text(title)
-                .font(.title3)
-                .fontWeight(.medium)
+                .font(.mintysis(size: 24))  // Используем новый шрифт
         }
         .foregroundColor(.white)
         .frame(width: 280)

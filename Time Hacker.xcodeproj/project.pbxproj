@@ -255,6 +255,7 @@
 				DEVELOPMENT_TEAM = 846R72L445;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Time-Hacker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Time Hacker";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.role-playing-games";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -287,6 +288,7 @@
 				DEVELOPMENT_TEAM = 846R72L445;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Time-Hacker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Time Hacker";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.role-playing-games";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
