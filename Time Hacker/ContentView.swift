@@ -6,9 +6,13 @@ struct ContentView: View {
     @State private var startLevel = 1
     
     var body: some View {
-        ZStack {  // Заменяем Group на ZStack
+        ZStack {
             if showGame {
-                GameView(startingLevel: startLevel, levelManager: levelManager)
+                GameView(
+                    startingLevel: startLevel,
+                    levelManager: levelManager,
+                    showGame: $showGame
+                )
             } else {
                 MainMenuView(
                     levelManager: levelManager,
@@ -19,7 +23,8 @@ struct ContentView: View {
                     selectLevel: { selectedLevel in
                         startLevel = selectedLevel
                         showGame = true
-                    }
+                    },
+                    showGame: $showGame
                 )
             }
         }
@@ -59,6 +64,7 @@ struct MainMenuView: View {
     let selectLevel: (Int) -> Void
     @State private var showLevelSelect = false
     @State private var showAboutGame = false
+    @Binding var showGame: Bool
     
     var body: some View {
         ZStack {
@@ -79,11 +85,15 @@ struct MainMenuView: View {
                 
                 VStack(spacing: 16) {
                     Button(action: startGame) {
-                        MenuButton(title: " Начать игру", systemImage: "play.fill")
+                        MenuButton(title: "Начать игру", systemImage: "play.fill")
                     }
                     
                     Button(action: { showLevelSelect = true }) {
                         MenuButton(title: "Выбрать уровень", systemImage: "list.number")
+                    }
+                    
+                    Button(action: { levelManager.showStatistics = true }) {
+                        MenuButton(title: "Статистика", systemImage: "chart.bar.fill")
                     }
                     
                     Button(action: { showAboutGame = true }) {
@@ -102,9 +112,57 @@ struct MainMenuView: View {
         .sheet(isPresented: $showAboutGame) {
             AboutGameView()
         }
+        .sheet(isPresented: $levelManager.showStatistics) {
+            StatisticsView(
+                statistics: levelManager.gameStatistics,
+                levelManager: levelManager,
+                showGame: $showGame
+            )
+        }
     }
 }
 
+struct MenuButton: View {
+    let title: String
+    let systemImage: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: systemImage)
+                .font(.title3)
+            Text(title)
+                .font(.mintysis(size: 24))
+        }
+        .foregroundColor(.white)
+        .frame(width: 280)
+        .padding(.vertical, 14)
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.blue.opacity(0.3),
+                    Color.blue.opacity(0.2)
+                ]),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.white.opacity(0.3),
+                            Color.white.opacity(0.1)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .cornerRadius(12)
+    }
+}
 struct AboutGameView: View {
     @Environment(\.dismiss) private var dismiss
     
@@ -149,52 +207,13 @@ struct AboutGameView: View {
     }
 }
 
-struct MenuButton: View {
-    let title: String
-    let systemImage: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: systemImage)
-                .font(.title3)
-            Text(title)
-                .font(.mintysis(size: 24))  // Используем новый шрифт
-        }
-        .foregroundColor(.white)
-        .frame(width: 280)
-        .padding(.vertical, 14)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.blue.opacity(0.3),
-                    Color.blue.opacity(0.2)
-                ]),
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.3),
-                            Color.white.opacity(0.1)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .cornerRadius(12)
-    }
-}
+
 
 struct LevelSelectView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var levelManager: LevelManager
     let startGame: (Int) -> Void
+    @State private var showResetAlert = false
     
     private let columns = [
         GridItem(.flexible()),
@@ -266,6 +285,20 @@ struct LevelSelectView: View {
                             }
                         }
                         .padding(.horizontal, 10)
+                        
+                        Button(action: { showResetAlert = true }) {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text("Сбросить прогресс")
+                            }
+                            .foregroundColor(.red)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 20)
                     }
                 }
             }
@@ -277,6 +310,14 @@ struct LevelSelectView: View {
                     .font(.title2)
                     .foregroundColor(.white)
             })
+            .alert("Сбросить прогресс?", isPresented: $showResetAlert) {
+                Button("Отмена", role: .cancel) { }
+                Button("Сбросить", role: .destructive) {
+                    levelManager.resetProgress()
+                }
+            } message: {
+                Text("Все уровни, кроме первого, будут заблокированы. Статистика прохождения сохранится.")
+            }
         }
     }
     
@@ -321,7 +362,7 @@ struct Message: Identifiable, Equatable {
 }
 
 
-struct LevelStatistics {
+struct LevelStatistics: Codable {
     let timeSpent: TimeInterval
     let messagesCount: Int
     let totalCharacters: Int
@@ -329,8 +370,9 @@ struct LevelStatistics {
     let endTime: Date
 }
 
-struct GameStatistics {
+struct GameStatistics: Codable {
     var levelsStats: [Int: LevelStatistics] = [:]
+    var bestLevelStats: [Int: LevelStatistics] = [:]
     
     var totalTimeSpent: TimeInterval {
         levelsStats.values.reduce(0) { $0 + $1.timeSpent }
@@ -342,6 +384,33 @@ struct GameStatistics {
     
     var totalCharacters: Int {
         levelsStats.values.reduce(0) { $0 + $1.totalCharacters }
+    }
+    
+    mutating func updateBestStats(level: Int, stats: LevelStatistics) {
+        if let currentBest = bestLevelStats[level] {
+            if stats.timeSpent < currentBest.timeSpent {
+                bestLevelStats[level] = stats
+                save()
+            }
+        } else {
+            bestLevelStats[level] = stats
+            save()
+        }
+    }
+    
+    // Убрали private модификатор
+    mutating func save() {
+        if let encoded = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(encoded, forKey: "GameStatistics")
+        }
+    }
+    
+    static func load() -> GameStatistics {
+        if let data = UserDefaults.standard.data(forKey: "GameStatistics"),
+           let decoded = try? JSONDecoder().decode(GameStatistics.self, from: data) {
+            return decoded
+        }
+        return GameStatistics()
     }
 }
 
@@ -461,20 +530,43 @@ class LevelManager: ObservableObject {
     @Published var showLevelCompleteAlert = false
     @Published var errorMessage: String?
     @Published var showStatistics = false
-    @Published var gameStatistics = GameStatistics()
-    // Добавляем новое свойство:
+    @Published var gameStatistics: GameStatistics
     @Published var levelProgress: LevelProgress
     
     private var currentLevelStartTime = Date()
     private var currentMessagesCount = 0
     private var currentCharactersCount = 0
     
-    // Обновляем инициализатор
     init() {
+        self.gameStatistics = GameStatistics.load()
         self.levelProgress = LevelProgress.load()
     }
     
-    // Добавляем новые методы
+    // Добавляем метод для получения контента уровня
+    func getCurrentLevelContent() -> LevelContent? {
+        return LevelContent.levels[currentLevel]
+    }
+    func resetProgress() {
+        levelProgress = LevelProgress(unlockedLevels: [1]) // Передаем Set с первым уровнем
+        levelProgress.save()
+        objectWillChange.send()
+    }
+    
+    // Обновляем метод загрузки уровня
+    func loadLevel(_ level: Int) {
+        guard level <= 10, LevelContent.levels[level] != nil else { return }
+        currentLevel = level
+        resetLevelStats()
+    }
+    
+    // Метод сброса статистики уровня
+    func resetLevelStats() {
+        currentLevelStartTime = Date()
+        currentMessagesCount = 0
+        currentCharactersCount = 0
+    }
+    
+    // Метод разблокировки следующего уровня
     func unlockNextLevel() {
         let nextLevel = currentLevel + 1
         if nextLevel <= 10 {
@@ -484,52 +576,20 @@ class LevelManager: ObservableObject {
         }
     }
     
+    // Проверка разблокирован ли уровень
     func isLevelUnlocked(_ level: Int) -> Bool {
         return levelProgress.unlockedLevels.contains(level)
-    }
-    
-    
-    var currentLevelContent: LevelContent? {
-        return LevelContent.levels[currentLevel]
-    }
-    
-    func loadLevel(_ level: Int) {
-        guard level <= 10, LevelContent.levels[level] != nil else { return }
-        currentLevel = level
-        resetLevelStats()
-    }
-    
-    func resetLevelStats() {
-        currentLevelStartTime = Date()
-        currentMessagesCount = 0
-        currentCharactersCount = 0
-    }
-    
-    func resetGame() {
-        currentLevel = 1
-        gameStatistics = GameStatistics()
-        resetLevelStats()
-        showStatistics = false
-        objectWillChange.send()
-    }
-    
-    func checkLevelComplete(message: String) -> Bool {
-        if message.lowercased().contains("go333") {
-            return true
-        }
-        return false
-    }
-    
-    func checkVictoryInResponse(response: String) -> Bool {
-        guard let level = currentLevelContent else { return false }
-        return level.victoryConditions.contains { condition in
-            response.contains(condition)
-        }
     }
     
     func recordMessage(_ message: String) {
         currentMessagesCount += 1
         currentCharactersCount += message.count
+    }
+    
+    func nextLevel() {
+        if currentLevel < 10 {
+            loadLevel(currentLevel + 1)
+        }
     }
     
     func completedLevel() {
@@ -541,16 +601,34 @@ class LevelManager: ObservableObject {
             endTime: Date()
         )
         gameStatistics.levelsStats[currentLevel] = stats
+        gameStatistics.updateBestStats(level: currentLevel, stats: stats)
         
         if currentLevel >= 10 {
             showStatistics = true
         }
+        
+        // Сохраняем статистику
+        gameStatistics.save()
     }
     
-    func nextLevel() {
-        if currentLevel < 10 {
-            loadLevel(currentLevel + 1)
+    func resetGame() {
+        currentLevel = 1
+        gameStatistics = GameStatistics()
+        gameStatistics.save()
+        resetLevelStats()
+        showStatistics = false
+        objectWillChange.send()
+    }
+    
+    func checkVictoryInResponse(response: String) -> Bool {
+        guard let level = getCurrentLevelContent() else { return false }
+        return level.victoryConditions.contains { condition in
+            response.contains(condition)
         }
+    }
+    
+    func checkLevelComplete(message: String) -> Bool {
+        return message.lowercased().contains("go333")
     }
 }
 
@@ -612,6 +690,7 @@ struct StatisticsView: View {
     let statistics: GameStatistics
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var levelManager: LevelManager
+    @Binding var showGame: Bool
     @State private var showingRestartAlert = false
     
     private var shareText: String {
@@ -622,26 +701,24 @@ struct StatisticsView: View {
         💬 Всего сообщений: \(statistics.totalMessages)
         📝 Всего символов: \(statistics.totalCharacters)
         
-        По уровням:
-        \(levelStatsText)
+        Лучшее время по уровням:
+        \(bestLevelStatsText)
         
         Попробуй свои навыки социальной инженерии! 🕵️‍♂️
         """
     }
-     
-    private var levelStatsText: String {
-        (1...10).compactMap { level in
-            if let stats = statistics.levelsStats[level] {
-                return """
+    
+    private var bestLevelStatsText: String {
+        statistics.bestLevelStats.sorted { $0.key < $1.key }
+            .map { level, stats in
+                """
                 
                 Уровень \(level):
                 ⏱️ Время: \(formatTime(stats.timeSpent))
                 💬 Сообщений: \(stats.messagesCount)
-                📝 Символов: \(stats.totalCharacters)
                 """
             }
-            return nil
-        }.joined()
+            .joined()
     }
     
     var body: some View {
@@ -653,22 +730,31 @@ struct StatisticsView: View {
                     StatRow(title: "Всего символов", value: "\(statistics.totalCharacters)")
                 }
                 
-                Section(header: Text("По уровням")) {
+                Section(header: Text("Лучшее время прохождения")) {
+                    ForEach(1...10, id: \.self) { level in
+                        if let bestStats = statistics.bestLevelStats[level] {
+                            Section(header: Text("Уровень \(level)")) {
+                                StatRow(title: "Лучшее время", value: formatTime(bestStats.timeSpent))
+                                StatRow(title: "Сообщений", value: "\(bestStats.messagesCount)")
+                                StatRow(title: "Дата прохождения", value: formatDate(bestStats.endTime))
+                            }
+                        }
+                    }
+                }
+                
+                Section(header: Text("Текущая сессия")) {
                     ForEach(1...10, id: \.self) { level in
                         if let levelStats = statistics.levelsStats[level] {
                             Section(header: Text("Уровень \(level)")) {
                                 StatRow(title: "Время", value: formatTime(levelStats.timeSpent))
                                 StatRow(title: "Сообщений", value: "\(levelStats.messagesCount)")
-                                StatRow(title: "Символов", value: "\(levelStats.totalCharacters)")
                             }
                         }
                     }
                 }
                 
                 Section {
-                    Button(action: {
-                        shareStats()
-                    }) {
+                    Button(action: shareStats) {
                         HStack {
                             Image(systemName: "square.and.arrow.up")
                             Text("Поделиться результатами")
@@ -688,6 +774,7 @@ struct StatisticsView: View {
             }
             .navigationTitle("Статистика игры")
             .navigationBarItems(trailing: Button("Закрыть") {
+                showGame = false
                 dismiss()
             })
             .alert("Начать сначала?", isPresented: $showingRestartAlert) {
@@ -707,6 +794,13 @@ struct StatisticsView: View {
         return "\(minutes)м \(seconds)с"
     }
     
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
     private func shareStats() {
         let activityVC = UIActivityViewController(
             activityItems: [shareText],
@@ -723,10 +817,10 @@ struct StatisticsView: View {
     
     private func restartGame() {
         levelManager.resetGame()
+        showGame = false
         dismiss()
     }
 }
-
 
 struct StatRow: View {
     let title: String
@@ -742,21 +836,25 @@ struct StatRow: View {
     }
 }
 
+
+
 struct GameView: View {
     @ObservedObject var levelManager: LevelManager
     @StateObject private var chatContext = ChatContextManager()
     @State private var messageText: String = ""
     @State private var uiMessages: [Message] = []
     @State private var isLoading: Bool = false
+    @Binding var showGame: Bool
     @State private var scrollProxy: ScrollViewProxy?
     private let loadingIndicatorID = "loading_spinner_id"
     
     private let anthropicService = AnthropicService()
     let startingLevel: Int
     
-    init(startingLevel: Int, levelManager: LevelManager) {
+    init(startingLevel: Int, levelManager: LevelManager, showGame: Binding<Bool>) {
         self.startingLevel = startingLevel
         _levelManager = ObservedObject(wrappedValue: levelManager)
+        _showGame = showGame
     }
     
     var body: some View {
@@ -876,7 +974,11 @@ struct GameView: View {
             }
         }
         .sheet(isPresented: $levelManager.showStatistics) {
-            StatisticsView(statistics: levelManager.gameStatistics, levelManager: levelManager)
+            StatisticsView(
+                statistics: levelManager.gameStatistics,
+                levelManager: levelManager,
+                showGame: $showGame
+            )
         }
         .onAppear {
             levelManager.loadLevel(startingLevel)
@@ -885,7 +987,7 @@ struct GameView: View {
     }
     
     private func loadInitialMessage() {
-        guard let level = levelManager.currentLevelContent else {
+        guard let level = levelManager.getCurrentLevelContent() else {
             uiMessages = [Message(content: "Ошибка загрузки уровня", isUser: false, type: .status)]
             return
         }
@@ -898,8 +1000,6 @@ struct GameView: View {
             Message(content: level.sceneDescription, isUser: false, type: .status),
             Message(content: level.initialMessage, isUser: false, type: .message)
         ]
-        
-        chatContext.clearContext()
         
         // Объединяем базовый промпт и промпт уровня
         let combinedPrompt = """
@@ -986,7 +1086,7 @@ struct GameView: View {
                         }
                         
                         if levelManager.checkVictoryInResponse(response: trimmedComponent) {
-                            if let victoryMessage = levelManager.currentLevelContent?.victoryMessage {
+                            if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
                                 // Снова прокручиваем перед победным сообщением
                                 if let proxy = scrollProxy {
                                     proxy.scrollTo(uiMessages.last?.id, anchor: .bottom)
@@ -1032,6 +1132,7 @@ struct GameView: View {
     struct MessageBubble: View {
         let message: Message
         let onNextLevel: (() -> Void)?
+        @EnvironmentObject var levelManager: LevelManager  // Добавляем как environment object
         
         init(message: Message, onNextLevel: (() -> Void)? = nil) {
             self.message = message
@@ -1084,7 +1185,6 @@ struct GameView: View {
                         .fontWeight(isLevelHeader(message.content) ? .bold : .regular)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
-              
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(radius: 1, y: 1)
                         .multilineTextAlignment(.center)
@@ -1098,6 +1198,13 @@ struct GameView: View {
                         .foregroundColor(.white)
                         .padding(.top, 8)
                         .multilineTextAlignment(.center)
+                    
+                    if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
+                        Text(victoryMessage)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                    }
                     
                     Button(action: {
                         onNextLevel?()
@@ -1117,10 +1224,9 @@ struct GameView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .shadow(radius: 3, y: 2)
                 .padding(.horizontal, 16)
-                
+                .environmentObject(levelManager)
             }
         }
-        
     }
 }
 
