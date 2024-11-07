@@ -1084,7 +1084,7 @@ struct GameView: View {
                         .fontWeight(isLevelHeader(message.content) ? .bold : .regular)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
-                        .background(Color(uiColor: .systemGray6))
+              
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(radius: 1, y: 1)
                         .multilineTextAlignment(.center)
