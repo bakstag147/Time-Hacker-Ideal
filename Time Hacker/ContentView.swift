@@ -827,8 +827,9 @@ struct GameView: View {
                         Image("bgchat\(levelManager.currentLevel)")
                             .resizable()
                             .scaledToFill()
+                            .frame(width: 1000, alignment: .topLeading)
                             .edgesIgnoringSafeArea(.all)
-                            .opacity(0.5)
+                            .opacity(0.1)
                     )
                 }
                 .onAppear {
