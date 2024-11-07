@@ -365,21 +365,6 @@ struct AnthropicMessage: Codable {
     let content: String
 }
 
-struct AnthropicResponse: Codable {
-    let id: String
-    let type: String
-    let role: String
-    let content: [AnthropicContent]
-    let model: String
-    let stopReason: String?
-    let usage: AnthropicUsage
-    
-    enum CodingKeys: String, CodingKey {
-        case id, type, role, content, model
-        case stopReason = "stop_reason"
-        case usage
-    }
-}
 
 struct AnthropicContent: Codable {
     let type: String
@@ -403,57 +388,71 @@ enum AnthropicError: Error {
 }
 
 // MARK: - Services
+
+
+struct AnthropicResponse: Codable {
+    let content: String
+}
+
 class AnthropicService {
-    private let apiKey = "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"
-    private let endpoint = "https://api.anthropic.com/v1/messages"
-    private let model = "claude-3-opus-20240229"
+    private let endpoint = "https://gg40e4wjm2.execute-api.eu-north-1.amazonaws.com/prod/proxy"
+    
+    struct AnthropicResponse: Codable {
+        let content: String
+    }
+    
+    enum AnthropicError: Error {
+        case invalidResponse
+        case apiError(String)
+    }
     
     func sendMessage(messages: [ChatMessage]) async throws -> String {
         var request = URLRequest(url: URL(string: endpoint)!)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
         
-        let systemMessage = messages.first(where: { $0.role == .system })?.content ?? ""
-        let anthropicMessages = messages
-            .filter { $0.role != .system }
-            .map { message in
-                AnthropicMessage(
-                    role: message.role == .user ? "user" : "assistant",
-                    content: message.content
-                )
-            }
+        let body = [
+            "messages": messages.map { [
+                "role": $0.role == .user ? "user" : "assistant",
+                "content": $0.content
+            ] },
+            "max_tokens": 1024
+        ] as [String : Any]
         
-        let body = AnthropicRequest(
-            model: model,
-            messages: anthropicMessages,
-            system: systemMessage,
-            maxTokens: 1024
-        )
+        print("=== ОТПРАВЛЯЕМЫЙ JSON ===")
+        let jsonData = try JSONSerialization.data(withJSONObject: body, options: .prettyPrinted)
+        print(String(data: jsonData, encoding: .utf8) ?? "")
         
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = jsonData
         
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw AnthropicError.invalidResponse
-            }
-            
-            if !(200...299).contains(httpResponse.statusCode) {
-                let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                throw AnthropicError.apiError("Status \(httpResponse.statusCode): \(errorMessage)")
-            }
-            
-            let anthropicResponse = try JSONDecoder().decode(AnthropicResponse.self, from: data)
-            return anthropicResponse.content.first?.text ?? ""
-            
-        } catch let error as AnthropicError {
-            throw error
-        } catch {
-            throw AnthropicError.networkError(error)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        print("=== ОТВЕТ СЕРВЕРА ===")
+        print(String(data: data, encoding: .utf8) ?? "")
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AnthropicError.invalidResponse
         }
+        
+        print("Статус код: \(httpResponse.statusCode)")
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorBody = errorData["body"] as? String {
+                throw AnthropicError.apiError(errorBody)
+            }
+            throw AnthropicError.apiError("Статус код: \(httpResponse.statusCode)")
+        }
+        
+        // Парсим ответ
+        guard let responseDict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let bodyString = responseDict["body"] as? String,
+              let bodyData = bodyString.data(using: .utf8) else {
+            throw AnthropicError.invalidResponse
+        }
+        
+        let anthropicResponse = try JSONDecoder().decode(AnthropicResponse.self, from: bodyData)
+        return anthropicResponse.content
     }
 }
 
