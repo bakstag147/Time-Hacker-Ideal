@@ -727,6 +727,7 @@ struct StatisticsView: View {
     }
 }
 
+
 struct StatRow: View {
     let title: String
     let value: String
@@ -750,7 +751,7 @@ struct GameView: View {
     @State private var scrollProxy: ScrollViewProxy?
     private let loadingIndicatorID = "loading_spinner_id"
     
-    private let anthropicService = AnthropicService()  // Добавляем сервис
+    private let anthropicService = AnthropicService()
     let startingLevel: Int
     
     init(startingLevel: Int, levelManager: LevelManager) {
@@ -782,32 +783,35 @@ struct GameView: View {
             .padding()
             .background(Color(uiColor: .systemBackground))
             .shadow(radius: 1)
+            
             // Main scroll view containing both image and messages
             ScrollViewReader { proxy in
                 ScrollView {
+                    // Убираем внешний ZStack и перемещаем фон в background
                     VStack(spacing: 12) {
                         // Level image
                         Group {
                             if let _ = UIImage(named: "bgLevel\(levelManager.currentLevel)") {
                                 Image("bgLevel\(levelManager.currentLevel)")
                                     .resizable()
-                                    .scaledToFit()
-                                    .frame(maxWidth: .infinity)
+                                    .scaledToFill() // Изменено на Fill для полного покрытия
+                                    .clipped() // Обрезает изображение по границам
                             } else {
                                 Image(systemName: "person.2.fill")
                                     .resizable()
-                                    .scaledToFit()
-                                    .frame(maxWidth: .infinity)
+                                    .scaledToFill()
+                                    .frame(maxWidth: .infinity, maxHeight: 300)
+                                    .clipped()
                             }
                         }
-                        .padding()
+                        .cornerRadius(15)
                         .background(Color(uiColor: .systemGray6))
                         
                         // Messages
                         ForEach(uiMessages) { message in
                             MessageBubble(
                                 message: message,
-                                onNextLevel: {  // Передаем замыкание
+                                onNextLevel: {
                                     startNextLevel()
                                 }
                             )
@@ -819,9 +823,16 @@ struct GameView: View {
                         }
                     }
                     .padding()
+                    .background(
+                        Image("bgchat\(levelManager.currentLevel)")
+                            .resizable()
+                            .scaledToFill()
+                            .edgesIgnoringSafeArea(.all)
+                            .opacity(0.5)
+                    )
                 }
                 .onAppear {
-                    scrollProxy = proxy  // Сохраняем proxy при появлении view
+                    scrollProxy = proxy
                 }
                 .onChange(of: uiMessages) { _, _ in
                     if let lastMessage = uiMessages.last {
@@ -831,6 +842,7 @@ struct GameView: View {
                     }
                 }
             }
+        
             // Bottom input field
             HStack(spacing: 12) {
                 TextField("Введите сообщение...", text: $messageText)
@@ -870,6 +882,7 @@ struct GameView: View {
             loadInitialMessage()
         }
     }
+    
     private func loadInitialMessage() {
         guard let level = levelManager.currentLevelContent else {
             uiMessages = [Message(content: "Ошибка загрузки уровня", isUser: false, type: .status)]
@@ -1031,28 +1044,39 @@ struct GameView: View {
         var body: some View {
             switch message.type {
             case .message:
-                HStack {
-                    if message.isUser { Spacer() }
-                    
-                    Text(message.content)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(message.isUser ? Color.blue : Color(uiColor: .systemGray5))
-                        .foregroundColor(message.isUser ? .white : .primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                        .shadow(radius: 2, y: 1)
-                        .multilineTextAlignment(message.isUser ? .trailing : .leading)
-                    
-                    if !message.isUser { Spacer() }
+                HStack(alignment: .top) {
+                    if message.isUser {
+                        Spacer()
+                        Text(message.content)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .shadow(radius: 2, y: 1)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)
+                            .padding(.leading, 60)
+                    } else {
+                        Text(message.content)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color(uiColor: .systemGray5))
+                            .foregroundColor(.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .shadow(radius: 2, y: 1)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
+                            .padding(.trailing, 60)
+                        Spacer()
+                    }
                 }
-                .transition(.asymmetric(
-                    insertion: .scale(scale: 0.8).combined(with: .opacity),
-                    removal: .opacity
-                ))
+                .padding(.horizontal, 4)
                 
             case .status:
-                HStack {
-                    Spacer()
+                VStack {
                     Text(message.content)
                         .font(.system(size: isLevelHeader(message.content) ? 18 : 14))
                         .foregroundColor(isLevelHeader(message.content) ? .primary : .gray)
@@ -1062,12 +1086,9 @@ struct GameView: View {
                         .background(Color(uiColor: .systemGray6))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(radius: 1, y: 1)
-                    Spacer()
+                        .multilineTextAlignment(.center)
                 }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .top).combined(with: .opacity),
-                    removal: .opacity
-                ))
+                .frame(maxWidth: .infinity)
                 
             case .victory:
                 VStack(spacing: 12) {
@@ -1075,6 +1096,7 @@ struct GameView: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.top, 8)
+                        .multilineTextAlignment(.center)
                     
                     Button(action: {
                         onNextLevel?()
@@ -1094,9 +1116,10 @@ struct GameView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .shadow(radius: 3, y: 2)
                 .padding(.horizontal, 16)
-                .transition(.scale(scale: 0.8).combined(with: .opacity))
+                
             }
         }
+        
     }
 }
 
