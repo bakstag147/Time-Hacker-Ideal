@@ -908,7 +908,7 @@ struct GameView: View {
                                 }
                             )
                         }
-                        
+                        .environmentObject(levelManager)
                         if isLoading {
                             LoadingIndicator()
                                 .id(loadingIndicatorID)
@@ -1218,7 +1218,6 @@ struct GameView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .shadow(radius: 3, y: 2)
                 .padding(.horizontal, 16)
-                .environmentObject(levelManager)
             }
         }
     }
