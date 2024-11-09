@@ -471,90 +471,6 @@ struct AnthropicResponse: Codable {
     let content: String
 }
 
-class AnthropicService {
-    private let endpoint = "https://gg40e4wjm2.execute-api.eu-north-1.amazonaws.com/prod/proxy"
-    private let maxRetries = 3
-    private let retryDelay: UInt64 = 2_000_000_000 // 2 секунды
-    
-    struct AnthropicResponse: Codable {
-        let content: String
-    }
-    
-    struct APIResponse: Codable {
-        let statusCode: Int
-        let headers: [String: String]?
-        let body: String
-    }
-    
-    enum AnthropicError: Error {
-        case networkError(Error)
-        case apiError(String)
-        case invalidResponse
-        case overloaded
-    }
-    
-    func sendMessage(messages: [ChatMessage]) async throws -> String {
-        var attempts = 0
-        
-        while attempts < maxRetries {
-            do {
-                return try await sendMessageAttempt(messages: messages)
-            } catch AnthropicError.overloaded {
-                attempts += 1
-                if attempts < maxRetries {
-                    print("API перегружен. Повторная попытка \(attempts)/\(maxRetries)...")
-                    try await Task.sleep(nanoseconds: retryDelay)
-                    continue
-                }
-                throw AnthropicError.apiError("Сервис перегружен. Попробуйте позже.")
-            }
-        }
-        
-        throw AnthropicError.apiError("Превышено количество попыток. Попробуйте позже.")
-    }
-    
-    private func sendMessageAttempt(messages: [ChatMessage]) async throws -> String {
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        request.addValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        
-        let body = [
-            "messages": messages.map { [
-                "role": $0.role == .user ? "user" : "assistant",
-                "content": $0.content
-            ] },
-            "max_tokens": 1024
-        ] as [String : Any]
-        
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
-        request.httpBody = jsonData
-        
-        let (data, _) = try await URLSession.shared.data(for: request)
-        
-        print("\n=== ОТВЕТ СЕРВЕРА ===")
-        print(String(data: data, encoding: .utf8) ?? "")
-        
-        let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
-        print("Статус код: \(apiResponse.statusCode)")
-        
-        // Проверяем внутренний статус код
-        if apiResponse.statusCode == 529 {
-            throw AnthropicError.overloaded
-        }
-        
-        guard apiResponse.statusCode == 200 else {
-            throw AnthropicError.apiError("Ошибка API: \(apiResponse.statusCode)")
-        }
-        
-        guard let bodyData = apiResponse.body.data(using: .utf8),
-              let anthropicResponse = try? JSONDecoder().decode(AnthropicResponse.self, from: bodyData) else {
-            throw AnthropicError.invalidResponse
-        }
-        
-        return anthropicResponse.content
-            .replacingOccurrences(of: "\\n", with: "\n")
-    }
-}
 
 class LevelManager: ObservableObject {
     @Published var currentLevel = 1
@@ -876,7 +792,7 @@ struct GameView: View {
     @State private var reputation = Reputation()
     private let loadingIndicatorID = "loading_spinner_id"
     
-    private let anthropicService = AnthropicService()
+    private let aiService = AIService()
     let startingLevel: Int
     
     init(startingLevel: Int, levelManager: LevelManager, showGame: Binding<Bool>) {
@@ -1112,7 +1028,7 @@ struct GameView: View {
             }
             
             do {
-                let response = try await anthropicService.sendMessage(messages: chatContext.getFormattedContext())
+                let response = try await aiService.sendMessage(messages: chatContext.getFormattedContext())
                 
                 // Обрабатываем репутацию из ответа
                 let (cleanResponse, newReputation) = extractReputation(from: response)
@@ -1180,7 +1096,7 @@ struct GameView: View {
                 }
                 
                 chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
-            } catch let error as AnthropicError {
+            } catch let error as AIService.AIError {
                 switch error {
                 case .apiError(let message):
                     levelManager.errorMessage = "Ошибка API: \(message)"
@@ -1188,6 +1104,10 @@ struct GameView: View {
                     levelManager.errorMessage = "Ошибка сети. Проверьте подключение к интернету."
                 case .invalidResponse:
                     levelManager.errorMessage = "Неверный ответ от сервера."
+                case .overloaded:
+                    levelManager.errorMessage = "Сервис перегружен. Попробуйте позже."
+                case .bothProvidersFailed(let details):
+                    levelManager.errorMessage = "Оба сервиса недоступны: \(details)"
                 }
             } catch {
                 levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
