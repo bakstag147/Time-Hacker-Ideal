@@ -9,14 +9,18 @@
 import SwiftUI
 
 struct Reputation {
-    private(set) var score: Int = 50 // Начинаем с нейтральной репутации
+    var score: Int = 50 {
+        didSet {
+            score = max(0, min(100, score))
+        }
+    }
     
     var level: ReputationLevel {
         switch score {
-        case ..<0: return .hostile
-        case 0..<25: return .suspicious
-        case 25..<75: return .neutral
-        case 75..<100: return .friendly
+        case ..<25: return .hostile
+        case 25..<50: return .suspicious
+        case 50..<75: return .neutral
+        case 75..<90: return .friendly
         default: return .trusting
         }
     }
@@ -47,9 +51,5 @@ struct Reputation {
             case .trusting: return "star.circle.fill"
             }
         }
-    }
-    
-    mutating func modify(by amount: Int) {
-        score = max(0, min(100, score + amount))
     }
 }

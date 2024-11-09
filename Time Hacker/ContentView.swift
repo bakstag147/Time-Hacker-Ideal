@@ -636,25 +636,6 @@ class LevelManager: ObservableObject {
             response.contains(condition)
         }
     }
-    func updateReputation(based message: String) {
-        let lowercased = message.lowercased()
-        
-        // Позитивные факторы
-        if lowercased.contains("уважение") || lowercased.contains("прошу прощения") {
-            reputation.modify(by: 5)
-        }
-        if lowercased.contains("традиции") || lowercased.contains("мудрость") {
-            reputation.modify(by: 3)
-        }
-        
-        // Негативные факторы
-        if lowercased.contains("угроз") || lowercased.contains("застав") {
-            reputation.modify(by: -10)
-        }
-        if lowercased.contains("требую") || lowercased.contains("немедленно") {
-            reputation.modify(by: -5)
-        }
-    }
     
     func checkLevelComplete(message: String) -> Bool {
         return message.lowercased().contains("go333")
@@ -1010,6 +991,29 @@ struct GameView: View {
             loadInitialMessage()
         }
     }
+    private func extractReputation(from response: String) -> (cleanResponse: String, newReputation: Int?) {
+        // Ищем значение репутации в формате *REPUTATION:X*
+        let pattern = #"\*REPUTATION:(\d+)\*"#
+        
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: response,
+                range: NSRange(response.startIndex..., in: response)
+              ),
+              let reputationRange = Range(match.range(at: 1), in: response),
+              let newReputation = Int(response[reputationRange]) else {
+            return (response, nil)
+        }
+        
+        // Удаляем метку репутации из ответа
+        let cleanResponse = regex.stringByReplacingMatches(
+            in: response,
+            range: NSRange(response.startIndex..., in: response),
+            withTemplate: ""
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return (cleanResponse, newReputation)
+    }
     
     private func loadInitialMessage() {
         guard let level = levelManager.getCurrentLevelContent() else {
@@ -1062,23 +1066,6 @@ struct GameView: View {
             
             levelManager.recordMessage(trimmedMessage)
             
-            // Обновляем репутацию на основе сообщения
-            levelManager.updateReputation(based: trimmedMessage)
-            
-            // Если репутация изменилась, показываем это
-            let oldScore = levelManager.reputation.score
-            if oldScore != levelManager.reputation.score {
-                let change = levelManager.reputation.score - oldScore
-                withAnimation(.spring(response: 0.3)) {
-                    uiMessages.append(Message(
-                        content: "",
-                        isUser: false,
-                        type: .reputationChange,
-                        reputationChange: change
-                    ))
-                }
-            }
-            
             let userMessage = Message(content: trimmedMessage, isUser: true, type: .message)
             withAnimation(.spring(response: 0.3)) {
                 uiMessages.append(userMessage)
@@ -1090,16 +1077,8 @@ struct GameView: View {
                 return
             }
             
-            // Добавляем информацию о репутации в контекст
-            let reputationContext = """
-            Текущий уровень репутации: \(levelManager.reputation.level.rawValue)
-            Уровень доверия: \(levelManager.reputation.score)/100
-            """
-
-            let updatedPrompt = (levelManager.getCurrentLevelContent()?.prompt ?? "") + "\n\n" + reputationContext
-            chatContext.addMessage(ChatMessage(role: .system, content: updatedPrompt))
             chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
-
+            
             isLoading = true
             if let proxy = scrollProxy {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -1112,19 +1091,39 @@ struct GameView: View {
             do {
                 let response = try await anthropicService.sendMessage(messages: chatContext.getFormattedContext())
                 
-                let components = response.components(separatedBy: "*")
+                // Обрабатываем репутацию из ответа
+                let (cleanResponse, newReputation) = extractReputation(from: response)
+                
+                // Если получили новое значение репутации, обновляем его
+                if let newReputation = newReputation {
+                    let oldScore = levelManager.reputation.score
+                    levelManager.reputation.score = newReputation
+                    
+                    // Показываем изменение репутации
+                    if oldScore != newReputation {
+                        let change = newReputation - oldScore
+                        withAnimation(.spring(response: 0.3)) {
+                            uiMessages.append(Message(
+                                content: "",
+                                isUser: false,
+                                type: .reputationChange,
+                                reputationChange: change
+                            ))
+                        }
+                    }
+                }
+                
+                // Обрабатываем очищенный ответ
+                let components = cleanResponse.components(separatedBy: "*")
                 for (index, component) in components.enumerated() {
                     let trimmedComponent = component.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmedComponent.isEmpty {
-                        // Прокручиваем заранее
                         if let proxy = scrollProxy {
                             proxy.scrollTo(loadingIndicatorID, anchor: .bottom)
                         }
                         
-                        // Ждем немного после прокрутки
-                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 секунды
+                        try? await Task.sleep(nanoseconds: 100_000_000)
                         
-                        // Теперь добавляем сообщение
                         if index % 2 == 1 {
                             withAnimation(.spring(response: 0.3)) {
                                 uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .status))
@@ -1137,7 +1136,6 @@ struct GameView: View {
                         
                         if levelManager.checkVictoryInResponse(response: trimmedComponent) {
                             if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
-                                // Снова прокручиваем перед победным сообщением
                                 if let proxy = scrollProxy {
                                     proxy.scrollTo(uiMessages.last?.id, anchor: .bottom)
                                 }
@@ -1154,12 +1152,11 @@ struct GameView: View {
                             }
                         }
                         
-                        // Ждем завершения анимации перед следующим сообщением
-                        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 секунды
+                        try? await Task.sleep(nanoseconds: 300_000_000)
                     }
                 }
                 
-                chatContext.addMessage(ChatMessage(role: .assistant, content: response))
+                chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
             } catch let error as AnthropicError {
                 switch error {
                 case .apiError(let message):
