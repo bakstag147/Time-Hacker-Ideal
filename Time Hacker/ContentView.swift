@@ -478,15 +478,22 @@ class AnthropicService {
         let content: String
     }
     
+    struct APIResponse: Codable {
+        let statusCode: Int
+        let headers: [String: String]?
+        let body: String
+    }
+    
     enum AnthropicError: Error {
         case invalidResponse
         case apiError(String)
+        case networkError(Error)
     }
     
     func sendMessage(messages: [ChatMessage]) async throws -> String {
         var request = URLRequest(url: URL(string: endpoint)!)
         request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         
         let body = [
             "messages": messages.map { [
@@ -505,7 +512,9 @@ class AnthropicService {
         let (data, response) = try await URLSession.shared.data(for: request)
         
         print("=== ОТВЕТ СЕРВЕРА ===")
-        print(String(data: data, encoding: .utf8) ?? "")
+        if let rawResponse = String(data: data, encoding: .utf8) {
+            print(rawResponse)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AnthropicError.invalidResponse
@@ -521,15 +530,27 @@ class AnthropicService {
             throw AnthropicError.apiError("Статус код: \(httpResponse.statusCode)")
         }
         
-        // Парсим ответ
-        guard let responseDict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let bodyString = responseDict["body"] as? String,
-              let bodyData = bodyString.data(using: .utf8) else {
+        // Декодируем ответ с правильной обработкой кодировки
+        do {
+            let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
+            
+            // Декодируем body как JSON строку
+            if let bodyData = apiResponse.body.data(using: .utf8),
+               let anthropicResponse = try? JSONDecoder().decode(AnthropicResponse.self, from: bodyData) {
+                
+                // Дополнительная обработка для замены некорректных символов
+                let content = anthropicResponse.content
+                    .replacingOccurrences(of: "��", with: "с") // Замена конкретных проблемных символов
+                    .replacingOccurrences(of: "\\n", with: "\n") // Правильная обработка переносов строк
+                
+                return content
+            }
+        } catch {
+            print("Ошибка декодирования: \(error)")
             throw AnthropicError.invalidResponse
         }
         
-        let anthropicResponse = try JSONDecoder().decode(AnthropicResponse.self, from: bodyData)
-        return anthropicResponse.content
+        throw AnthropicError.invalidResponse
     }
 }
 
