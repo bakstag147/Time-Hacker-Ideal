@@ -350,14 +350,22 @@ struct Message: Identifiable, Equatable {
     let content: String
     let isUser: Bool
     let type: MessageType
-    let timestamp = Date()
+    var reputationChange: Int? // Добавляем это новое свойство
     
+    enum MessageType {
+        case message
+        case status
+        case victory
+        case reputationChange // Добавляем этот новый case
+    }
+    
+    // Добавляем реализацию Equatable
     static func == (lhs: Message, rhs: Message) -> Bool {
         lhs.id == rhs.id &&
         lhs.content == rhs.content &&
         lhs.isUser == rhs.isUser &&
         lhs.type == rhs.type &&
-        lhs.timestamp == rhs.timestamp
+        lhs.reputationChange == rhs.reputationChange
     }
 }
 
@@ -532,6 +540,7 @@ class LevelManager: ObservableObject {
     @Published var showStatistics = false
     @Published var gameStatistics: GameStatistics
     @Published var levelProgress: LevelProgress
+    @Published var reputation = Reputation()
     
     private var currentLevelStartTime = Date()
     private var currentMessagesCount = 0
@@ -564,6 +573,7 @@ class LevelManager: ObservableObject {
         currentLevelStartTime = Date()
         currentMessagesCount = 0
         currentCharactersCount = 0
+        reputation = Reputation()
     }
     
     // Метод разблокировки следующего уровня
@@ -624,6 +634,25 @@ class LevelManager: ObservableObject {
         guard let level = getCurrentLevelContent() else { return false }
         return level.victoryConditions.contains { condition in
             response.contains(condition)
+        }
+    }
+    func updateReputation(based message: String) {
+        let lowercased = message.lowercased()
+        
+        // Позитивные факторы
+        if lowercased.contains("уважение") || lowercased.contains("прошу прощения") {
+            reputation.modify(by: 5)
+        }
+        if lowercased.contains("традиции") || lowercased.contains("мудрость") {
+            reputation.modify(by: 3)
+        }
+        
+        // Негативные факторы
+        if lowercased.contains("угроз") || lowercased.contains("застав") {
+            reputation.modify(by: -10)
+        }
+        if lowercased.contains("требую") || lowercased.contains("немедленно") {
+            reputation.modify(by: -5)
         }
     }
     
@@ -840,6 +869,7 @@ struct GameView: View {
     @State private var isLoading: Bool = false
     @Binding var showGame: Bool
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var reputation = Reputation()
     private let loadingIndicatorID = "loading_spinner_id"
     
     private let anthropicService = AnthropicService()
@@ -862,6 +892,7 @@ struct GameView: View {
                     .font(.subheadline)
                     .foregroundColor(.gray)
                 Spacer()
+                ReputationIndicator(reputation: levelManager.reputation)
                 Button(action: {
                     levelManager.resetLevelStats()
                     chatContext.clearContext()
@@ -935,7 +966,7 @@ struct GameView: View {
                     }
                 }
             }
-        
+            
             // Bottom input field
             HStack(spacing: 12) {
                 TextField("Введите сообщение...", text: $messageText)
@@ -1031,6 +1062,23 @@ struct GameView: View {
             
             levelManager.recordMessage(trimmedMessage)
             
+            // Обновляем репутацию на основе сообщения
+            levelManager.updateReputation(based: trimmedMessage)
+            
+            // Если репутация изменилась, показываем это
+            let oldScore = levelManager.reputation.score
+            if oldScore != levelManager.reputation.score {
+                let change = levelManager.reputation.score - oldScore
+                withAnimation(.spring(response: 0.3)) {
+                    uiMessages.append(Message(
+                        content: "",
+                        isUser: false,
+                        type: .reputationChange,
+                        reputationChange: change
+                    ))
+                }
+            }
+            
             let userMessage = Message(content: trimmedMessage, isUser: true, type: .message)
             withAnimation(.spring(response: 0.3)) {
                 uiMessages.append(userMessage)
@@ -1042,8 +1090,16 @@ struct GameView: View {
                 return
             }
             
+            // Добавляем информацию о репутации в контекст
+            let reputationContext = """
+            Текущий уровень репутации: \(levelManager.reputation.level.rawValue)
+            Уровень доверия: \(levelManager.reputation.score)/100
+            """
+
+            let updatedPrompt = (levelManager.getCurrentLevelContent()?.prompt ?? "") + "\n\n" + reputationContext
+            chatContext.addMessage(ChatMessage(role: .system, content: updatedPrompt))
             chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
-            
+
             isLoading = true
             if let proxy = scrollProxy {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -1126,7 +1182,7 @@ struct GameView: View {
     struct MessageBubble: View {
         let message: Message
         let onNextLevel: (() -> Void)?
-        @EnvironmentObject var levelManager: LevelManager  // Добавляем как environment object
+        @EnvironmentObject var levelManager: LevelManager
         
         init(message: Message, onNextLevel: (() -> Void)? = nil) {
             self.message = message
@@ -1218,6 +1274,19 @@ struct GameView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .shadow(radius: 3, y: 2)
                 .padding(.horizontal, 16)
+                
+            case .reputationChange:
+                if let change = message.reputationChange {
+                    HStack {
+                        Image(systemName: change > 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                            .foregroundColor(change > 0 ? .green : .red)
+                        Text("Репутация \(change > 0 ? "+" : "")\(change)")
+                            .font(.caption)
+                            .foregroundColor(change > 0 ? .green : .red)
+                    }
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity)
+                }
             }
         }
     }
