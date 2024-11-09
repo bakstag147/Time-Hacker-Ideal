@@ -990,130 +990,180 @@ struct GameView: View {
     
     private func sendMessage() {
         Task {
+            // 1. Проверка состояния и валидация
+            guard !isLoading else { return }
             let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedMessage.isEmpty else { return }
             
-            // Отладочный вывод перед отправкой в API
-            print("\n=== ОТПРАВКА В API ===")
-            let context = chatContext.getFormattedContext()
-            for (index, msg) in context.enumerated() {
-                print("\nСообщение \(index):")
-                print("Роль: \(msg.role)")
-                print("Первые 100 символов: \(String(msg.content))")
-            }
-            print("=== КОНЕЦ ОТПРАВКИ ===\n")
+            // 2. Подготовка к отправке
+            await prepareForSending(message: trimmedMessage)
             
-            levelManager.recordMessage(trimmedMessage)
-            
-            let userMessage = Message(content: trimmedMessage, isUser: true, type: .message)
-            withAnimation(.spring(response: 0.3)) {
-                uiMessages.append(userMessage)
-            }
-            messageText = ""
-            
-            if levelManager.checkLevelComplete(message: trimmedMessage) {
-                levelManager.showLevelCompleteAlert = true
-                return
-            }
-            
-            chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
-            
+            // 3. Отправка и обработка
             isLoading = true
-            if let proxy = scrollProxy {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation {
-                        proxy.scrollTo(loadingIndicatorID, anchor: .bottom)
-                    }
-                }
-            }
+            defer { isLoading = false }
             
             do {
                 let response = try await aiService.sendMessage(messages: chatContext.getFormattedContext())
+                await processResponse(response, trimmedMessage)
+            } catch {
+                await handleError(error)
+            }
+        }
+    }
+
+    // Вспомогательные функции
+    @MainActor
+    private func prepareForSending(message: String) {
+        // Логирование
+        #if DEBUG
+        logContext()
+        #endif
+        
+        // Обработка сообщения
+        levelManager.recordMessage(message)
+        appendUserMessage(message)
+        messageText = ""
+        
+        // Проверка завершения уровня
+        if levelManager.checkLevelComplete(message: message) {
+            levelManager.showLevelCompleteAlert = true
+            return
+        }
+        
+        // Добавление в контекст
+        chatContext.addMessage(ChatMessage(role: .user, content: message))
+        
+        // Прокрутка к индикатору загрузки
+        scrollToLoadingIndicator()
+    }
+
+    @MainActor
+    private func processResponse(_ response: String, _ originalMessage: String) async {
+        let (cleanResponse, newReputation) = extractReputation(from: response)
+        
+        // Обновление репутации
+        if let newReputation = newReputation {
+            updateReputation(newReputation)
+        }
+        
+        // Отображение сообщений
+        await displayMessages(from: cleanResponse)
+        
+        // Добавление ответа в контекст
+        chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
+    }
+    
+    @MainActor
+    private func updateReputation(_ newReputation: Int) {
+        let oldScore = levelManager.reputation.score
+        levelManager.reputation.score = newReputation
+        
+        // Показываем изменение репутации
+        if oldScore != newReputation {
+            let change = newReputation - oldScore
+            withAnimation(.spring(response: 0.3)) {
+                uiMessages.append(Message(
+                    content: "",
+                    isUser: false,
+                    type: .reputationChange,
+                    reputationChange: change
+                ))
+            }
+        }
+    }
+
+    @MainActor
+    private func displayMessages(from response: String) async {
+        let components = response.components(separatedBy: "*")
+        for (index, component) in components.enumerated() {
+            let trimmedComponent = component.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedComponent.isEmpty {
+                if let proxy = scrollProxy {
+                    proxy.scrollTo(loadingIndicatorID, anchor: .bottom)
+                }
                 
-                // Обрабатываем репутацию из ответа
-                let (cleanResponse, newReputation) = extractReputation(from: response)
+                try? await Task.sleep(nanoseconds: 100_000_000)
                 
-                // Если получили новое значение репутации, обновляем его
-                if let newReputation = newReputation {
-                    let oldScore = levelManager.reputation.score
-                    levelManager.reputation.score = newReputation
-                    
-                    // Показываем изменение репутации
-                    if oldScore != newReputation {
-                        let change = newReputation - oldScore
+                if index % 2 == 1 {
+                    withAnimation(.spring(response: 0.3)) {
+                        uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .status))
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.3)) {
+                        uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .message))
+                    }
+                }
+                
+                if levelManager.checkVictoryInResponse(response: trimmedComponent) {
+                    if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
+                        if let proxy = scrollProxy {
+                            proxy.scrollTo(uiMessages.last?.id, anchor: .bottom)
+                        }
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        
                         withAnimation(.spring(response: 0.3)) {
+                            uiMessages.append(Message(content: victoryMessage, isUser: false, type: .status))
                             uiMessages.append(Message(
-                                content: "",
+                                content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
                                 isUser: false,
-                                type: .reputationChange,
-                                reputationChange: change
+                                type: .victory
                             ))
                         }
                     }
                 }
                 
-                // Обрабатываем очищенный ответ
-                let components = cleanResponse.components(separatedBy: "*")
-                for (index, component) in components.enumerated() {
-                    let trimmedComponent = component.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmedComponent.isEmpty {
-                        if let proxy = scrollProxy {
-                            proxy.scrollTo(loadingIndicatorID, anchor: .bottom)
-                        }
-                        
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                        
-                        if index % 2 == 1 {
-                            withAnimation(.spring(response: 0.3)) {
-                                uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .status))
-                            }
-                        } else {
-                            withAnimation(.spring(response: 0.3)) {
-                                uiMessages.append(Message(content: trimmedComponent, isUser: false, type: .message))
-                            }
-                        }
-                        
-                        if levelManager.checkVictoryInResponse(response: trimmedComponent) {
-                            if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
-                                if let proxy = scrollProxy {
-                                    proxy.scrollTo(uiMessages.last?.id, anchor: .bottom)
-                                }
-                                try? await Task.sleep(nanoseconds: 100_000_000)
-                                
-                                withAnimation(.spring(response: 0.3)) {
-                                    uiMessages.append(Message(content: victoryMessage, isUser: false, type: .status))
-                                    uiMessages.append(Message(
-                                        content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
-                                        isUser: false,
-                                        type: .victory
-                                    ))
-                                }
-                            }
-                        }
-                        
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                    }
-                }
-                
-                chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
-            } catch let error as AIService.AIError {
-                switch error {
-                case .apiError(let message):
-                    levelManager.errorMessage = "Ошибка API: \(message)"
-                case .networkError(_):
-                    levelManager.errorMessage = "Ошибка сети. Проверьте подключение к интернету."
-                case .invalidResponse:
-                    levelManager.errorMessage = "Неверный ответ от сервера."
-                case .overloaded:
-                    levelManager.errorMessage = "Сервис перегружен. Попробуйте позже."
-                case .bothProvidersFailed(let details):
-                    levelManager.errorMessage = "Оба сервиса недоступны: \(details)"
-                }
-            } catch {
-                levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
+                try? await Task.sleep(nanoseconds: 300_000_000)
             }
-            
-            isLoading = false
+        }
+    }
+
+    private func logContext() {
+        print("\n=== ОТПРАВКА В API ===")
+        let context = chatContext.getFormattedContext()
+        for (index, msg) in context.enumerated() {
+            print("\nСообщение \(index):")
+            print("Роль: \(msg.role)")
+            print("Первые 100 символов: \(String(msg.content))")
+        }
+        print("=== КОНЕЦ ОТПРАВКИ ===\n")
+    }
+
+    @MainActor
+    private func scrollToLoadingIndicator() {
+        if let proxy = scrollProxy {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation {
+                    proxy.scrollTo(self.loadingIndicatorID, anchor: .bottom)
+                }
+            }
+        }
+    }
+    
+    @MainActor
+    private func handleError(_ error: Error) {
+        if let aiError = error as? AIService.AIError {
+            switch aiError {
+            case .apiError(let message):
+                levelManager.errorMessage = "Ошибка API: \(message)"
+            case .networkError(_):
+                levelManager.errorMessage = "Ошибка сети. Проверьте подключение к интернету."
+            case .invalidResponse:
+                levelManager.errorMessage = "Неверный ответ от сервера."
+            case .overloaded:
+                levelManager.errorMessage = "Сервис перегружен. Попробуйте позже."
+            case .bothProvidersFailed(let details):
+                levelManager.errorMessage = "Оба сервиса недоступны: \(details)"
+            }
+        } else {
+            levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func appendUserMessage(_ message: String) {
+        let userMessage = Message(content: message, isUser: true, type: .message)
+        withAnimation(.spring(response: 0.3)) {
+            uiMessages.append(userMessage)
         }
     }
     
