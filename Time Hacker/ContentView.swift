@@ -163,6 +163,18 @@ struct MenuButton: View {
         .cornerRadius(12)
     }
 }
+
+struct LevelContent: Codable {
+    let number: Int
+    let title: String
+    let description: String
+    let sceneDescription: String
+    let initialMessage: String
+    let systemPrompt: String
+    let victoryConditions: [String]
+    let victoryMessage: String
+}
+
 struct AboutGameView: View {
     @Environment(\.dismiss) private var dismiss
     
