@@ -471,6 +471,40 @@ struct AnthropicResponse: Codable {
     let content: String
 }
 
+struct APIResponse: Codable {
+    let statusCode: Int
+    let headers: [String: String]
+    let body: String
+}
+
+class LevelService {
+    static let shared = LevelService()
+    private let baseURL = "https://gg40e4wjm2.execute-api.eu-north-1.amazonaws.com/prod"
+    
+    func fetchLevel(_ number: Int) async throws -> LevelContent {
+        let url = URL(string: "\(baseURL)/levels")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["level": number]
+        request.httpBody = try JSONEncoder().encode(body)
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        
+        // Сначала декодируем обёртку
+        let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
+        
+        // Затем декодируем содержимое body
+        guard let bodyData = apiResponse.body.data(using: .utf8) else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid body data"])
+        }
+        
+        // Декодируем контент уровня из body
+        let levelContent = try JSONDecoder().decode(LevelContent.self, from: bodyData)
+        return levelContent
+    }
+}
 
 class LevelManager: ObservableObject {
     @Published var currentLevel = 1
@@ -480,6 +514,7 @@ class LevelManager: ObservableObject {
     @Published var gameStatistics: GameStatistics
     @Published var levelProgress: LevelProgress
     @Published var reputation = Reputation()
+    @Published private(set) var currentLevelContent: LevelContent?
     
     private var currentLevelStartTime = Date()
     private var currentMessagesCount = 0
@@ -490,24 +525,38 @@ class LevelManager: ObservableObject {
         self.levelProgress = LevelProgress.load()
     }
     
-    // Добавляем метод для получения контента уровня
     func getCurrentLevelContent() -> LevelContent? {
-        return LevelContent.levels[currentLevel]
+        return currentLevelContent
     }
+    
     func resetProgress() {
-        levelProgress = LevelProgress(unlockedLevels: [1]) // Передаем Set с первым уровнем
+        levelProgress = LevelProgress(unlockedLevels: [1])
         levelProgress.save()
         objectWillChange.send()
     }
     
-    // Обновляем метод загрузки уровня
-    func loadLevel(_ level: Int) {
-        guard level <= 10, LevelContent.levels[level] != nil else { return }
-        currentLevel = level
-        resetLevelStats()
+    func loadLevel(_ level: Int) async {
+        print("📱 Starting to load level:", level)
+        do {
+            print("🌐 Fetching level content from API...")
+            let content = try await LevelService.shared.fetchLevel(level)
+            print("✅ Successfully fetched level content:", content)
+            
+            await MainActor.run {
+                print("📲 Updating UI with new level content")
+                self.currentLevel = level
+                self.currentLevelContent = content
+                self.resetLevelStats()
+                print("✅ Level content updated successfully")
+            }
+        } catch {
+            print("❌ Error loading level:", error)
+            await MainActor.run {
+                self.errorMessage = "Ошибка загрузки уровня: \(error.localizedDescription)"
+            }
+        }
     }
     
-    // Метод сброса статистики уровня
     func resetLevelStats() {
         currentLevelStartTime = Date()
         currentMessagesCount = 0
@@ -515,7 +564,6 @@ class LevelManager: ObservableObject {
         reputation = Reputation()
     }
     
-    // Метод разблокировки следующего уровня
     func unlockNextLevel() {
         let nextLevel = currentLevel + 1
         if nextLevel <= 10 {
@@ -525,7 +573,6 @@ class LevelManager: ObservableObject {
         }
     }
     
-    // Проверка разблокирован ли уровень
     func isLevelUnlocked(_ level: Int) -> Bool {
         return levelProgress.unlockedLevels.contains(level)
     }
@@ -535,12 +582,21 @@ class LevelManager: ObservableObject {
         currentCharactersCount += message.count
     }
     
-    func nextLevel() {
-        if currentLevel < 10 {
-            loadLevel(currentLevel + 1)
+    func nextLevel() async {
+        // Сначала сохраняем статистику текущего уровня
+        completedLevel()
+        unlockNextLevel()
+        
+        // Проверяем, был ли это последний уровень
+        if currentLevel >= 10 {
+            await MainActor.run {
+                showStatistics = true
+            }
+        } else {
+            // Если нет, загружаем следующий уровень
+            await loadLevel(currentLevel + 1)
         }
     }
-    
     func completedLevel() {
         let stats = LevelStatistics(
             timeSpent: Date().timeIntervalSince(currentLevelStartTime),
@@ -556,7 +612,6 @@ class LevelManager: ObservableObject {
             showStatistics = true
         }
         
-        // Сохраняем статистику
         gameStatistics.save()
     }
     
@@ -580,7 +635,6 @@ class LevelManager: ObservableObject {
         return message.lowercased().contains("go333")
     }
 }
-
 
 class ChatContextManager: ObservableObject {
     @Published private var messages: [ChatMessage] = []
@@ -816,7 +870,9 @@ struct GameView: View {
                 Button(action: {
                     levelManager.resetLevelStats()
                     chatContext.clearContext()
-                    loadInitialMessage()
+                    Task {
+                        await loadLevelAndInitialize()
+                    }
                 }) {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
                         .font(.title2)
@@ -830,15 +886,14 @@ struct GameView: View {
             // Main scroll view containing both image and messages
             ScrollViewReader { proxy in
                 ScrollView {
-                    // Убираем внешний ZStack и перемещаем фон в background
                     VStack(spacing: 12) {
                         // Level image
                         Group {
                             if let _ = UIImage(named: "bgLevel\(levelManager.currentLevel)") {
                                 Image("bgLevel\(levelManager.currentLevel)")
                                     .resizable()
-                                    .scaledToFill() // Изменено на Fill для полного покрытия
-                                    .clipped() // Обрезает изображение по границам
+                                    .scaledToFill()
+                                    .clipped()
                             } else {
                                 Image(systemName: "person.2.fill")
                                     .resizable()
@@ -926,10 +981,14 @@ struct GameView: View {
             )
         }
         .onAppear {
-            levelManager.loadLevel(startingLevel)
-            loadInitialMessage()
+            print("🎮 GameView appeared")
+            print("📊 Starting level:", startingLevel)
+            Task {
+                await loadLevelAndInitialize()
+            }
         }
     }
+    
     private func extractReputation(from response: String) -> (cleanResponse: String, newReputation: Int?) {
         // Ищем значение репутации в формате *REPUTATION:X*
         let pattern = #"\*REPUTATION:(\d+)\*"#
@@ -956,9 +1015,14 @@ struct GameView: View {
     
     private func loadInitialMessage() {
         guard let level = levelManager.getCurrentLevelContent() else {
+            print("❌ Level content is nil")
             uiMessages = [Message(content: "Ошибка загрузки уровня", isUser: false, type: .status)]
             return
         }
+        
+        print("✅ Level loaded successfully:")
+        print("Title:", level.title)
+        print("System Prompt:", level.systemPrompt)
         
         chatContext.clearContext()
         
@@ -969,23 +1033,30 @@ struct GameView: View {
             Message(content: level.initialMessage, isUser: false, type: .message)
         ]
         
-        // Объединяем базовый промпт и промпт уровня
         let combinedPrompt = """
         \(ChatMessage.systemBasePrompt)
         
         РОЛЬ И ХАРАКТЕР:
-        \(level.prompt)
+        \(level.systemPrompt)
         """
+        
+        print("📝 Combined Prompt:", combinedPrompt)
         
         chatContext.addMessage(ChatMessage(role: .system, content: combinedPrompt))
     }
     
     private func startNextLevel() {
-        levelManager.completedLevel()
-        levelManager.unlockNextLevel()
-        levelManager.nextLevel()
-        chatContext.clearContext()
-        loadInitialMessage()
+        Task {
+            await levelManager.nextLevel()
+            chatContext.clearContext()
+            await loadLevelAndInitialize()
+        }
+    }
+    private func loadLevelAndInitialize() async {
+        await levelManager.loadLevel(levelManager.currentLevel)
+        await MainActor.run {
+            loadInitialMessage()
+        }
     }
     
     private func sendMessage() {
@@ -996,15 +1067,52 @@ struct GameView: View {
             guard !trimmedMessage.isEmpty else { return }
             
             // 2. Подготовка к отправке
-            await prepareForSending(message: trimmedMessage)
+            levelManager.recordMessage(trimmedMessage)
+            appendUserMessage(trimmedMessage)
+            messageText = ""
+            
+            // Проверка завершения уровня
+            if levelManager.checkLevelComplete(message: trimmedMessage) {
+                levelManager.showLevelCompleteAlert = true
+                return
+            }
+            
+            // Добавление в контекст
+            chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
+            
+            // Прокрутка к индикатору загрузки
+            scrollToLoadingIndicator()
             
             // 3. Отправка и обработка
             isLoading = true
             defer { isLoading = false }
             
             do {
+                print("🚀 Sending messages to API:")
+                for msg in chatContext.getFormattedContext() {
+                    print("Role:", msg.role)
+                    print("Content:", msg.content)
+                    print("---")
+                }
+                
                 let response = try await aiService.sendMessage(messages: chatContext.getFormattedContext())
-                await processResponse(response, trimmedMessage)
+                
+                // 4. Обработка ответа
+                let (cleanResponse, newReputation) = extractReputation(from: response)
+                
+                // Обновление репутации
+                if let newReputation = newReputation {
+                    await MainActor.run {
+                        updateReputation(newReputation)
+                    }
+                }
+                
+                // Отображение сообщений
+                await displayMessages(from: cleanResponse)
+                
+                // Добавление ответа в контекст
+                chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
+                
             } catch {
                 await handleError(error)
             }
