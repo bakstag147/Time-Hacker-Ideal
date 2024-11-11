@@ -1025,6 +1025,12 @@ struct GameView: View {
         }
     }
     
+    func formatMessageForDisplay(_ message: String) -> String {
+        // Удаляем маркер победы из текста перед отображением
+        return message.replacingOccurrences(of: "---VICTORY---", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
     private func extractReputation(from response: String) -> (cleanResponse: String, newReputation: Int?) {
         // Ищем значение репутации в формате *REPUTATION:X*
         let pattern = #"\*REPUTATION:(\d+)\*"#
@@ -1154,14 +1160,14 @@ struct GameView: View {
             }
         }
     }
-
+    
     // Вспомогательные функции
     @MainActor
     private func prepareForSending(message: String) {
         // Логирование
-        #if DEBUG
+#if DEBUG
         logContext()
-        #endif
+#endif
         
         // Обработка сообщения
         levelManager.recordMessage(message)
@@ -1180,7 +1186,7 @@ struct GameView: View {
         // Прокрутка к индикатору загрузки
         scrollToLoadingIndicator()
     }
-
+    
     @MainActor
     private func processResponse(_ response: String, _ originalMessage: String) async {
         let (cleanResponse, newReputation) = extractReputation(from: response)
@@ -1215,10 +1221,13 @@ struct GameView: View {
             }
         }
     }
-
+    
     @MainActor
     private func displayMessages(from response: String) async {
-        let components = response.components(separatedBy: "*")
+        // Очищаем ответ от маркера победы для отображения
+        let cleanResponse = formatMessageForDisplay(response)
+        
+        let components = cleanResponse.components(separatedBy: "*")
         for (index, component) in components.enumerated() {
             let trimmedComponent = component.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedComponent.isEmpty {
@@ -1238,29 +1247,28 @@ struct GameView: View {
                     }
                 }
                 
-                if levelManager.checkVictoryInResponse(response: trimmedComponent) {
-                    if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
-                        if let proxy = scrollProxy {
-                            proxy.scrollTo(uiMessages.last?.id, anchor: .bottom)
-                        }
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                        
-                        withAnimation(.spring(response: 0.3)) {
-                            uiMessages.append(Message(content: victoryMessage, isUser: false, type: .status))
-                            uiMessages.append(Message(
-                                content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
-                                isUser: false,
-                                type: .victory
-                            ))
-                        }
+                // Проверяем наличие маркера победы в оригинальном ответе
+                if response.contains("---VICTORY---") {
+                    if let proxy = scrollProxy {
+                        proxy.scrollTo(uiMessages.last?.id, anchor: .bottom)
                     }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    
+                    withAnimation(.spring(response: 0.3)) {
+                        uiMessages.append(Message(
+                            content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
+                            isUser: false,
+                            type: .victory
+                        ))
+                    }
+                    break // Прерываем цикл после обработки победы
                 }
                 
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
         }
     }
-
+    
     private func logContext() {
         print("\n=== ОТПРАВКА В API ===")
         let context = chatContext.getFormattedContext()
@@ -1271,7 +1279,7 @@ struct GameView: View {
         }
         print("=== КОНЕЦ ОТПРАВКИ ===\n")
     }
-
+    
     @MainActor
     private func scrollToLoadingIndicator() {
         if let proxy = scrollProxy {
@@ -1302,7 +1310,7 @@ struct GameView: View {
             levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
         }
     }
-
+    
     @MainActor
     private func appendUserMessage(_ message: String) {
         let userMessage = Message(content: message, isUser: true, type: .message)
@@ -1323,6 +1331,16 @@ struct GameView: View {
             self.onNextLevel = onNextLevel
         }
         
+        // Добавляем вычисляемое свойство для очищенного контента
+        private var cleanContent: String {
+            formatMessageForDisplay(message.content)
+        }
+        
+        private func formatMessageForDisplay(_ message: String) -> String {
+            return message.replacingOccurrences(of: "---VICTORY---", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
         private func isLevelHeader(_ content: String) -> Bool {
             content.starts(with: "Уровень") && content.contains(":")
         }
@@ -1333,7 +1351,7 @@ struct GameView: View {
                 HStack(alignment: .top) {
                     if message.isUser {
                         Spacer()
-                        Text(message.content)
+                        Text(cleanContent)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(Color.blue)
@@ -1345,7 +1363,7 @@ struct GameView: View {
                             .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)
                             .padding(.leading, 60)
                     } else {
-                        Text(message.content)
+                        Text(cleanContent)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(Color(uiColor: .systemGray5))
@@ -1363,10 +1381,10 @@ struct GameView: View {
                 
             case .status:
                 VStack {
-                    Text(message.content)
-                        .font(.system(size: isLevelHeader(message.content) ? 18 : 14))
-                        .foregroundColor(isLevelHeader(message.content) ? .primary : .gray)
-                        .fontWeight(isLevelHeader(message.content) ? .bold : .regular)
+                    Text(cleanContent)
+                        .font(.system(size: isLevelHeader(cleanContent) ? 18 : 14))
+                        .foregroundColor(isLevelHeader(cleanContent) ? .primary : .gray)
+                        .fontWeight(isLevelHeader(cleanContent) ? .bold : .regular)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -1377,7 +1395,7 @@ struct GameView: View {
                 
             case .victory:
                 VStack(spacing: 12) {
-                    Text(message.content)
+                    Text(cleanContent)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.top, 8)
