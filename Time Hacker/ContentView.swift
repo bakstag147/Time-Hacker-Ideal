@@ -502,20 +502,44 @@ class LevelService {
         let body = ["level": number]
         request.httpBody = try JSONEncoder().encode(body)
         
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
-        // Сначала декодируем обёртку
+        // Проверяем HTTP-ответ
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response type"])
+        }
+        
+        // Выводим данные для отладки
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("Raw response: \(responseString)")
+        }
+        
+        // Проверяем наличие ошибки в ответе
+        if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+            throw NSError(
+                domain: "",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "API Error: \(errorResponse.errorMessage)"]
+            )
+        }
+        
+        // Если нет ошибки, пробуем декодировать ответ
         let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
         
-        // Затем декодируем содержимое body
         guard let bodyData = apiResponse.body.data(using: .utf8) else {
             throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid body data"])
         }
         
-        // Декодируем контент уровня из body
         let levelContent = try JSONDecoder().decode(LevelContent.self, from: bodyData)
         return levelContent
     }
+}
+
+// Добавляем структуру для обработки ошибок API
+struct APIErrorResponse: Codable {
+    let errorType: String
+    let errorMessage: String
+    let trace: [String]
 }
 
 class LevelManager: ObservableObject {
