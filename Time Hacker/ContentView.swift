@@ -1220,6 +1220,7 @@ struct GameView: View {
             await loadLevelAndInitialize()
         }
     }
+    @MainActor
     private func loadLevelAndInitialize() async {
         do {
             // Загружаем уровень
@@ -1229,15 +1230,10 @@ struct GameView: View {
             try await chatContext.initializeContext()
             
             // Загружаем начальное сообщение уровня
-            await MainActor.run {
-                Task {
-                    await loadInitialMessage()
-                }
-            }
+            await loadInitialMessage()
+            
         } catch {
-            await MainActor.run {
-                levelManager.errorMessage = "Ошибка загрузки системного промпта: \(error.localizedDescription)"
-            }
+            levelManager.errorMessage = "Ошибка загрузки системного промпта: \(error.localizedDescription)"
         }
     }
     
