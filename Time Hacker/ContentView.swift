@@ -793,7 +793,12 @@ class ChatContextManager: ObservableObject {
     
     // Новый метод для инициализации с системным промптом
     func initializeContext() async throws {
-        let systemPrompt = try await systemPromptLoader.loadSystemPrompt()
+        let systemPrompt = try await SystemPromptLoader.shared.loadSystemPrompt()
+        
+        // Очищаем предыдущий контекст
+        messages.removeAll()
+        
+        // Добавляем системный промпт как первое сообщение
         await MainActor.run {
             messages = [ChatMessage(role: .system, content: systemPrompt)]
             saveContext()
@@ -1169,8 +1174,8 @@ struct GameView: View {
             ]
             
             do {
-                // Получаем системный промпт асинхронно
-                let systemPrompt = try await ChatMessage.systemBasePrompt
+                // Получаем системный промпт из контекста
+                let systemPrompt = try await SystemPromptLoader.shared.loadSystemPrompt()
                 
                 let combinedPrompt = """
                 \(systemPrompt)
@@ -1181,6 +1186,8 @@ struct GameView: View {
                 
                 print("📝 Combined Prompt:", combinedPrompt)
                 
+                // Обновляем системное сообщение в контексте
+                chatContext.clearContext() // Очищаем старый контекст
                 chatContext.addMessage(ChatMessage(role: .system, content: combinedPrompt))
             } catch {
                 print("❌ Error loading system prompt:", error)
@@ -1527,7 +1534,6 @@ struct GameView: View {
                         Text(victoryMessage)
                             .font(.system(size: 14))
                             .foregroundColor(.white)
-                            .background(levelManager.currentTheme.primary.opacity(0.9))
                             .multilineTextAlignment(.center)
                     }
                     
@@ -1545,7 +1551,7 @@ struct GameView: View {
                     .padding(.bottom, 8)
                 }
                 .frame(maxWidth: .infinity)
-                .background(Color.blue.opacity(0.9))
+                .background(levelManager.currentTheme.primary.opacity(0.9))
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .shadow(radius: 3, y: 2)
                 .padding(.horizontal, 16)
