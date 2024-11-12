@@ -564,6 +564,23 @@
         }
       }
     },
+    "LEVEL_VICTORY" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Congratulations! You've successfully completed level %d!"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поздравляем! Вы успешно прошли уровень %d!"
+          }
+        }
+      }
+    },
     "NETWORK_ERROR" : {
       "extractionState" : "manual",
       "localizations" : {

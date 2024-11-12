@@ -1228,7 +1228,11 @@ struct GameView: View {
     private func loadInitialMessage() async {
         if let level = levelManager.getCurrentLevelContent() {
             uiMessages = [
-                Message(content: "Уровень \(level.number): \(level.title)", isUser: false, type: .status),
+                Message(
+                    content: String(format: NSLocalizedString("LEVEL", comment: ""), level.number) + ": \(level.title)",
+                    isUser: false,
+                    type: .status
+                ),
                 Message(content: level.description, isUser: false, type: .status),
                 Message(content: level.sceneDescription, isUser: false, type: .status),
                 Message(content: level.initialMessage, isUser: false, type: .message)
@@ -1442,7 +1446,7 @@ struct GameView: View {
                     
                     withAnimation(.spring(response: 0.3)) {
                         uiMessages.append(Message(
-                            content: "🎉 Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)!",
+                            content: String(format: NSLocalizedString("LEVEL_VICTORY", comment: ""), levelManager.currentLevel),
                             isUser: false,
                             type: .victory
                         ))
