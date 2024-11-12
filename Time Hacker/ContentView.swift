@@ -772,28 +772,35 @@ class LevelManager: ObservableObject {
 class ChatContextManager: ObservableObject {
     @Published private var messages: [ChatMessage] = []
     private let contextKey = "chatContext"
+    private let systemPromptLoader = SystemPromptLoader.shared
     
     func getFormattedContext() -> [ChatMessage] {
-        // Просто возвращаем все сообщения в правильном порядке
         return messages
     }
 
     func addMessage(_ message: ChatMessage) {
-        // Если это системное сообщение и оно уже есть, не добавляем его повторно
         if message.role == .system && messages.contains(where: { $0.role == .system }) {
             return
         }
-        
         messages.append(message)
         saveContext()
     }
-    
     
     func clearContext() {
         messages.removeAll()
         UserDefaults.standard.removeObject(forKey: contextKey)
     }
     
+    // Новый метод для инициализации с системным промптом
+    func initializeContext() async throws {
+        let systemPrompt = try await systemPromptLoader.loadSystemPrompt()
+        await MainActor.run {
+            messages = [ChatMessage(role: .system, content: systemPrompt)]
+            saveContext()
+        }
+    }
+    
+    // Остальные методы без изменений
     private func saveContext() {
         let context = messages.map { message in
             return [
@@ -1152,36 +1159,34 @@ struct GameView: View {
         return (cleanResponse, newReputation)
     }
     
-    private func loadInitialMessage() {
-        guard let level = levelManager.getCurrentLevelContent() else {
-            print("❌ Level content is nil")
-            uiMessages = [Message(content: "Ошибка загрузки уровня", isUser: false, type: .status)]
-            return
+    private func loadInitialMessage() async {
+        if let level = levelManager.getCurrentLevelContent() {
+            uiMessages = [
+                Message(content: "Уровень \(level.number): \(level.title)", isUser: false, type: .status),
+                Message(content: level.description, isUser: false, type: .status),
+                Message(content: level.sceneDescription, isUser: false, type: .status),
+                Message(content: level.initialMessage, isUser: false, type: .message)
+            ]
+            
+            do {
+                // Получаем системный промпт асинхронно
+                let systemPrompt = try await ChatMessage.systemBasePrompt
+                
+                let combinedPrompt = """
+                \(systemPrompt)
+                
+                РОЛЬ И ХАРАКТЕР:
+                \(level.systemPrompt)
+                """
+                
+                print("📝 Combined Prompt:", combinedPrompt)
+                
+                chatContext.addMessage(ChatMessage(role: .system, content: combinedPrompt))
+            } catch {
+                print("❌ Error loading system prompt:", error)
+                levelManager.errorMessage = "Ошибка загрузки системного промпта: \(error.localizedDescription)"
+            }
         }
-        
-        print("✅ Level loaded successfully:")
-        print("Title:", level.title)
-        print("System Prompt:", level.systemPrompt)
-        
-        chatContext.clearContext()
-        
-        uiMessages = [
-            Message(content: "Уровень \(level.number): \(level.title)", isUser: false, type: .status),
-            Message(content: level.description, isUser: false, type: .status),
-            Message(content: level.sceneDescription, isUser: false, type: .status),
-            Message(content: level.initialMessage, isUser: false, type: .message)
-        ]
-        
-        let combinedPrompt = """
-        \(ChatMessage.systemBasePrompt)
-        
-        РОЛЬ И ХАРАКТЕР:
-        \(level.systemPrompt)
-        """
-        
-        print("📝 Combined Prompt:", combinedPrompt)
-        
-        chatContext.addMessage(ChatMessage(role: .system, content: combinedPrompt))
     }
     
     private func startNextLevel() {
@@ -1192,9 +1197,23 @@ struct GameView: View {
         }
     }
     private func loadLevelAndInitialize() async {
-        await levelManager.loadLevel(levelManager.currentLevel)
-        await MainActor.run {
-            loadInitialMessage()
+        do {
+            // Загружаем уровень
+            await levelManager.loadLevel(levelManager.currentLevel)
+            
+            // Инициализируем контекст с системным промптом
+            try await chatContext.initializeContext()
+            
+            // Загружаем начальное сообщение уровня
+            await MainActor.run {
+                Task {
+                    await loadInitialMessage()
+                }
+            }
+        } catch {
+            await MainActor.run {
+                levelManager.errorMessage = "Ошибка загрузки системного промпта: \(error.localizedDescription)"
+            }
         }
     }
     
