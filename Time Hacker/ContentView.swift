@@ -600,14 +600,17 @@ class LevelService {
     static let shared = LevelService()
     private let baseURL = "https://gg40e4wjm2.execute-api.eu-north-1.amazonaws.com/prod"
     
-    func fetchLevel(_ number: Int) async throws -> LevelContent {
+    func fetchLevel(_ number: Int, language: String) async throws -> LevelContent {
         let url = URL(string: "\(baseURL)/levels")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body = ["level": number]
-        request.httpBody = try JSONEncoder().encode(body)
+        let body: [String: Any] = [
+            "level": number,
+            "language": language
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -679,26 +682,25 @@ class LevelManager: ObservableObject {
         objectWillChange.send()
     }
     
+    @MainActor
     func loadLevel(_ level: Int) async {
         print("📱 Starting to load level:", level)
         do {
             print("🌐 Fetching level content from API...")
-            let content = try await LevelService.shared.fetchLevel(level)
+            let language = Locale.getSupportedLanguage()
+            print("🌍 Using language:", language)
+            
+            let content = try await LevelService.shared.fetchLevel(level, language: language)
             print("✅ Successfully fetched level content:", content)
             
-            await MainActor.run {
-                print("📲 Updating UI with new level content")
-                self.currentLevel = level
-                self.currentLevelContent = content
-                self.currentTheme = LevelTheme.forLevel(level)
-                self.resetLevelStats()
-                print("✅ Level content updated successfully")
-            }
+            self.currentLevel = level
+            self.currentLevelContent = content
+            self.currentTheme = LevelTheme.forLevel(level)
+            self.resetLevelStats()
+            print("✅ Level content updated successfully")
         } catch {
             print("❌ Error loading level:", error)
-            await MainActor.run {
-                self.errorMessage = "Ошибка загрузки уровня: \(error.localizedDescription)"
-            }
+            self.errorMessage = "Ошибка загрузки уровня: \(error.localizedDescription)"
         }
     }
     
