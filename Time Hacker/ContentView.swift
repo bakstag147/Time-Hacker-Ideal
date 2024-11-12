@@ -704,6 +704,7 @@ class LevelManager: ObservableObject {
     @Published var reputation = Reputation()
     @Published private(set) var currentLevelContent: LevelContent?
     @Published var currentTheme: LevelTheme = LevelTheme.forLevel(1)
+    @Published private(set) var isLoading = false
     
     private var currentLevelStartTime = Date()
     private var currentMessagesCount = 0
@@ -725,26 +726,32 @@ class LevelManager: ObservableObject {
     }
     
     @MainActor
-    func loadLevel(_ level: Int) async {
-        print("📱 Starting to load level:", level)
-        do {
-            print("🌐 Fetching level content from API...")
-            let language = Locale.getSupportedLanguage()
-            print("🌍 Using language:", language)
+        func loadLevel(_ level: Int) async {
+            print("📱 Starting to load level:", level)
+            isLoading = true
+            errorMessage = nil
             
-            let content = try await LevelService.shared.fetchLevel(level, language: language)
-            print("✅ Successfully fetched level content:", content)
+            do {
+                print("🌐 Fetching level content from API...")
+                let language = Locale.getSupportedLanguage()
+                print("🌍 Using language:", language)
+                
+                let content = try await LevelService.shared.fetchLevel(level, language: language)
+                print("✅ Successfully fetched level content:", content)
+                
+                self.currentLevel = level
+                self.currentLevelContent = content
+                self.currentTheme = LevelTheme.forLevel(level)
+                self.resetLevelStats()
+                print("✅ Level content updated successfully")
+                
+            } catch {
+                print("❌ Error loading level:", error)
+                self.errorMessage = "Error: \(error.localizedDescription)"
+            }
             
-            self.currentLevel = level
-            self.currentLevelContent = content
-            self.currentTheme = LevelTheme.forLevel(level)
-            self.resetLevelStats()
-            print("✅ Level content updated successfully")
-        } catch {
-            print("❌ Error loading level:", error)
-            self.errorMessage = "Ошибка загрузки уровня: \(error.localizedDescription)"
+            isLoading = false  // Завершаем загрузку в любом случае
         }
-    }
     
     func resetLevelStats() {
         currentLevelStartTime = Date()
@@ -1091,49 +1098,60 @@ struct GameView: View {
             // Main scroll view containing both image and messages
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 12) {
-                        // Level image
-                        Group {
-                            if let _ = UIImage(named: "bgLevel\(levelManager.currentLevel)") {
-                                Image("bgLevel\(levelManager.currentLevel)")
-                                    .resizable()
-                                    .scaledToFill()
-                                    .clipped()
-                            } else {
-                                Image(systemName: "person.2.fill")
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(maxWidth: .infinity, maxHeight: 300)
-                                    .clipped()
+                    if levelManager.isLoading {
+                        ProgressView()
+                    } else if let error = levelManager.errorMessage {
+                        NetworkErrorView(
+                            errorMessage: error,
+                            retryAction: {
+                                await loadLevelAndInitialize()
+                            }
+                        )
+                    } else {
+                        VStack(spacing: 12) {
+                            // Level image
+                            Group {
+                                if let _ = UIImage(named: "bgLevel\(levelManager.currentLevel)") {
+                                    Image("bgLevel\(levelManager.currentLevel)")
+                                        .resizable()
+                                        .scaledToFill()
+                                        .clipped()
+                                } else {
+                                    Image(systemName: "person.2.fill")
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(maxWidth: .infinity, maxHeight: 300)
+                                        .clipped()
+                                }
+                            }
+                            .cornerRadius(15)
+                            .background(Color(uiColor: .systemGray6))
+                            
+                            // Messages
+                            ForEach(uiMessages) { message in
+                                MessageBubble(
+                                    message: message,
+                                    onNextLevel: {
+                                        startNextLevel()
+                                    }
+                                )
+                            }
+                            .environmentObject(levelManager)
+                            if isLoading {
+                                LoadingIndicator(theme: levelManager.currentTheme)
+                                    .id(loadingIndicatorID)
                             }
                         }
-                        .cornerRadius(15)
-                        .background(Color(uiColor: .systemGray6))
-                        
-                        // Messages
-                        ForEach(uiMessages) { message in
-                            MessageBubble(
-                                message: message,
-                                onNextLevel: {
-                                    startNextLevel()
-                                }
-                            )
-                        }
-                        .environmentObject(levelManager)
-                        if isLoading {
-                            LoadingIndicator(theme: levelManager.currentTheme)
-                                .id(loadingIndicatorID)
-                        }
+                        .padding()
+                        .background(
+                            Image("bgchat\(levelManager.currentLevel)")
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 1000, alignment: .topLeading)
+                                .edgesIgnoringSafeArea(.all)
+                                .opacity(0.1)
+                        )
                     }
-                    .padding()
-                    .background(
-                        Image("bgchat\(levelManager.currentLevel)")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 1000, alignment: .topLeading)
-                            .edgesIgnoringSafeArea(.all)
-                            .opacity(0.1)
-                    )
                 }
                 .onAppear {
                     scrollProxy = proxy
@@ -1171,7 +1189,10 @@ struct GameView: View {
         }
         
         .alert(String(localized: "ERROR"), isPresented: .constant(levelManager.errorMessage != nil)) {
-            Button(String(localized: "OK")) {
+            Button(String(localized: "RETRY")) {
+                Task {
+                    await loadLevelAndInitialize()
+                }
                 levelManager.errorMessage = nil
             }
         } message: {
@@ -1256,7 +1277,7 @@ struct GameView: View {
                 chatContext.addMessage(ChatMessage(role: .system, content: combinedPrompt))
             } catch {
                 print("❌ Error loading system prompt:", error)
-                levelManager.errorMessage = "Ошибка загрузки системного промпта: \(error.localizedDescription)"
+                levelManager.errorMessage = "Error: \(error.localizedDescription)"
             }
         }
     }
@@ -1281,7 +1302,7 @@ struct GameView: View {
             await loadInitialMessage()
             
         } catch {
-            levelManager.errorMessage = "Ошибка загрузки системного промпта: \(error.localizedDescription)"
+            levelManager.errorMessage = "ERROR: \(error.localizedDescription)"
         }
     }
     

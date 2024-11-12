@@ -835,6 +835,9 @@
         }
       }
     },
+    "RETRY" : {
+
+    },
     "SELECT_LEVEL" : {
       "extractionState" : "manual",
       "localizations" : {
