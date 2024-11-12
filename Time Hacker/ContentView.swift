@@ -1320,6 +1320,7 @@ struct GameView: View {
             
             // 2. Подготовка к отправке - все UI обновления в главном потоке
             await MainActor.run {
+                HapticManager.shared.messageSubmitted() // Haptic при отправке
                 levelManager.recordMessage(trimmedMessage)
                 appendUserMessage(trimmedMessage)
                 messageText = ""
@@ -1327,6 +1328,7 @@ struct GameView: View {
                 
                 // Проверка завершения уровня
                 if levelManager.checkLevelComplete(message: trimmedMessage) {
+                    HapticManager.shared.notifySuccess() // Haptic при завершении уровня
                     levelManager.showLevelCompleteAlert = true
                     isLoading = false
                     return
@@ -1358,6 +1360,13 @@ struct GameView: View {
                         updateReputation(newReputation)
                     }
                     
+                    // Haptic при получении ответа
+                    if response.contains("---VICTORY---") {
+                        HapticManager.shared.notifySuccess()
+                    } else {
+                        HapticManager.shared.messageReceived()
+                    }
+                    
                     // Отображение сообщений
                     Task {
                         await displayMessages(from: cleanResponse)
@@ -1370,6 +1379,7 @@ struct GameView: View {
                 
             } catch {
                 await MainActor.run {
+                    HapticManager.shared.notifyError() // Haptic при ошибке
                     handleError(error)
                     isLoading = false
                 }
