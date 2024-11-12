@@ -37,15 +37,106 @@ struct ContentView: View {
     }
 }
 
+struct LevelTheme {
+    let primary: Color // Основной цвет для кнопок и акцентов
+    let secondary: Color // Цвет для отправленных сообщений
+    let accent: Color // Дополнительный цвет (например, для победных сообщений)
+    
+    static let themes: [Int: LevelTheme] = [
+        1: LevelTheme(
+            primary: Color(hex: "0055CC"),    // Darker Blue
+            secondary: Color(hex: "3F3D99"),   // Darker Indigo
+            accent: Color(hex: "0088CC")       // Darker Light Blue
+        ),
+        2: LevelTheme(
+            primary: Color(hex: "2A8C3A"),    // Darker Green
+            secondary: Color(hex: "1F8C3A"),   // Darker Mint
+            accent: Color(hex: "208B3A")       // Darker Lime
+        ),
+        3: LevelTheme(
+            primary: Color(hex: "CC1E3F"),    // Darker Pink
+            secondary: Color(hex: "CC1F3F"),   // Darker Rose
+            accent: Color(hex: "CC3366")       // Darker Hot Pink
+        ),
+        4: LevelTheme(
+            primary: Color(hex: "CC6600"),    // Darker Orange
+            secondary: Color(hex: "CC7000"),   // Darker Light Orange
+            accent: Color(hex: "CC8033")       // Darker Warm Orange
+        ),
+        5: LevelTheme(
+            primary: Color(hex: "8033AA"),    // Darker Purple
+            secondary: Color(hex: "8C3DB3"),   // Darker Light Purple
+            accent: Color(hex: "8C5999")       // Darker Soft Purple
+        ),
+        6: LevelTheme(
+            primary: Color(hex: "3F3D99"),    // Darker Indigo
+            secondary: Color(hex: "4240A6"),   // Darker Light Indigo
+            accent: Color(hex: "4A3DB3")       // Darker Medium Slate Blue
+        ),
+        7: LevelTheme(
+            primary: Color(hex: "CC2E26"),    // Darker Red
+            secondary: Color(hex: "CC332D"),   // Darker Light Red
+            accent: Color(hex: "CC4040")       // Darker Soft Red
+        ),
+        8: LevelTheme(
+            primary: Color(hex: "008C86"),    // Darker Teal
+            secondary: Color(hex: "0099CC"),   // Darker Sky Blue
+            accent: Color(hex: "269E99")       // Darker Turquoise
+        ),
+        9: LevelTheme(
+            primary: Color(hex: "CC9900"),    // Darker Golden Yellow
+            secondary: Color(hex: "CC9900"),   // Darker Gold
+            accent: Color(hex: "CC8800")       // Darker Golden Orange
+        ),
+        10: LevelTheme(
+            primary: Color(hex: "1F7AA6"),    // Darker Electric Blue
+            secondary: Color(hex: "007799"),   // Darker Ocean Blue
+            accent: Color(hex: "2699B3")       // Darker Sky Blue
+        )
+    ]
+    
+    static func forLevel(_ level: Int) -> LevelTheme {
+        return themes[level] ?? themes[1]! // Возвращаем тему первого уровня как дефолтную
+    }
+}
+
+// Расширение для Color чтобы работать с hex-кодами
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (255, 0, 0, 0)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
 struct LoadingIndicator: View {
     @State private var animationState = false
+    let theme: LevelTheme
     
     var body: some View {
         HStack(spacing: 8) {
             ForEach(0..<3) { index in
                 Circle()
                     .frame(width: 8, height: 8)
-                    .foregroundColor(.blue)
+                    .foregroundColor(theme.secondary)
                     .scaleEffect(animationState ? 1.2 : 0.5)
                     .opacity(animationState ? 1 : 0.3)
                     .animation(
@@ -557,6 +648,7 @@ class LevelManager: ObservableObject {
     @Published var levelProgress: LevelProgress
     @Published var reputation = Reputation()
     @Published private(set) var currentLevelContent: LevelContent?
+    @Published var currentTheme: LevelTheme = LevelTheme.forLevel(1)
     
     private var currentLevelStartTime = Date()
     private var currentMessagesCount = 0
@@ -588,6 +680,7 @@ class LevelManager: ObservableObject {
                 print("📲 Updating UI with new level content")
                 self.currentLevel = level
                 self.currentLevelContent = content
+                self.currentTheme = LevelTheme.forLevel(level)
                 self.resetLevelStats()
                 print("✅ Level content updated successfully")
             }
@@ -625,20 +718,18 @@ class LevelManager: ObservableObject {
     }
     
     func nextLevel() async {
-        // Сначала сохраняем статистику текущего уровня
         completedLevel()
         unlockNextLevel()
         
-        // Проверяем, был ли это последний уровень
         if currentLevel >= 10 {
             await MainActor.run {
                 showStatistics = true
             }
         } else {
-            // Если нет, загружаем следующий уровень
             await loadLevel(currentLevel + 1)
         }
     }
+    
     func completedLevel() {
         let stats = LevelStatistics(
             timeSpent: Date().timeIntervalSince(currentLevelStartTime),
@@ -918,7 +1009,7 @@ struct GameView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
                         .font(.title2)
-                        .foregroundColor(.blue)
+                        .foregroundColor(levelManager.currentTheme.primary)
                 }
             }
             .padding()
@@ -958,7 +1049,7 @@ struct GameView: View {
                         }
                         .environmentObject(levelManager)
                         if isLoading {
-                            LoadingIndicator()
+                            LoadingIndicator(theme: levelManager.currentTheme)
                                 .id(loadingIndicatorID)
                         }
                     }
@@ -992,7 +1083,7 @@ struct GameView: View {
                 Button(action: { sendMessage() }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 32))
-                        .foregroundColor(.blue)
+                        .foregroundColor(levelManager.currentTheme.primary)
                 }
                 .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
             }
@@ -1114,26 +1205,26 @@ struct GameView: View {
             let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedMessage.isEmpty else { return }
             
-            // 2. Подготовка к отправке
-            levelManager.recordMessage(trimmedMessage)
-            appendUserMessage(trimmedMessage)
-            messageText = ""
-            
-            // Проверка завершения уровня
-            if levelManager.checkLevelComplete(message: trimmedMessage) {
-                levelManager.showLevelCompleteAlert = true
-                return
+            // 2. Подготовка к отправке - все UI обновления в главном потоке
+            await MainActor.run {
+                levelManager.recordMessage(trimmedMessage)
+                appendUserMessage(trimmedMessage)
+                messageText = ""
+                isLoading = true
+                
+                // Проверка завершения уровня
+                if levelManager.checkLevelComplete(message: trimmedMessage) {
+                    levelManager.showLevelCompleteAlert = true
+                    isLoading = false
+                    return
+                }
+                
+                // Добавление в контекст
+                chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
+                
+                // Прокрутка к индикатору загрузки
+                scrollToLoadingIndicator()
             }
-            
-            // Добавление в контекст
-            chatContext.addMessage(ChatMessage(role: .user, content: trimmedMessage))
-            
-            // Прокрутка к индикатору загрузки
-            scrollToLoadingIndicator()
-            
-            // 3. Отправка и обработка
-            isLoading = true
-            defer { isLoading = false }
             
             do {
                 print("🚀 Sending messages to API:")
@@ -1148,21 +1239,27 @@ struct GameView: View {
                 // 4. Обработка ответа
                 let (cleanResponse, newReputation) = extractReputation(from: response)
                 
-                // Обновление репутации
-                if let newReputation = newReputation {
-                    await MainActor.run {
+                await MainActor.run {
+                    // Обновление репутации
+                    if let newReputation = newReputation {
                         updateReputation(newReputation)
                     }
+                    
+                    // Отображение сообщений
+                    Task {
+                        await displayMessages(from: cleanResponse)
+                    }
+                    
+                    // Добавление ответа в контекст
+                    chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
+                    isLoading = false
                 }
                 
-                // Отображение сообщений
-                await displayMessages(from: cleanResponse)
-                
-                // Добавление ответа в контекст
-                chatContext.addMessage(ChatMessage(role: .assistant, content: cleanResponse))
-                
             } catch {
-                await handleError(error)
+                await MainActor.run {
+                    handleError(error)
+                    isLoading = false
+                }
             }
         }
     }
@@ -1360,8 +1457,8 @@ struct GameView: View {
                         Text(cleanContent)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color.blue)
-                            .foregroundColor(.white)
+                            .background(message.isUser ? levelManager.currentTheme.primary : Color(uiColor: .systemGray5))
+                            .foregroundColor(message.isUser ? .white : .primary)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                             .shadow(radius: 2, y: 1)
                             .multilineTextAlignment(.leading)
@@ -1372,8 +1469,8 @@ struct GameView: View {
                         Text(cleanContent)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color(uiColor: .systemGray5))
-                            .foregroundColor(.primary)
+                            .background(message.isUser ? levelManager.currentTheme.primary : Color(uiColor: .systemGray5))
+                            .foregroundColor(message.isUser ? .white : .primary)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                             .shadow(radius: 2, y: 1)
                             .multilineTextAlignment(.leading)
@@ -1411,6 +1508,7 @@ struct GameView: View {
                         Text(victoryMessage)
                             .font(.system(size: 14))
                             .foregroundColor(.white)
+                            .background(levelManager.currentTheme.primary.opacity(0.9))
                             .multilineTextAlignment(.center)
                     }
                     
@@ -1419,7 +1517,7 @@ struct GameView: View {
                     }) {
                         Text("Следующий уровень")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.blue)
+                            .foregroundColor(levelManager.currentTheme.primary)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 10)
                             .background(Color.white)
