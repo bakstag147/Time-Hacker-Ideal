@@ -239,8 +239,10 @@ struct MenuButton: View {
         HStack {
             Image(systemName: systemImage)
                 .font(.title3)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             Text(title)
-                .font(.mintysis(size: 24))
+                .font(.title3) // Заменяем .mintysis(size: 24)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         }
         .foregroundColor(.white)
         .frame(width: 280)
@@ -1076,6 +1078,7 @@ struct GameView: View {
             HStack {
                 Text(String(localized: "LEVEL \(levelManager.currentLevel)"))
                     .font(.title2)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                     .bold()
                 Spacer()
                 ReputationIndicator(reputation: levelManager.reputation)
@@ -1168,6 +1171,8 @@ struct GameView: View {
             // Bottom input field
             HStack(spacing: 12) {
                 TextField(String(localized: "ENTER_MESSAGE"), text: $messageText)
+                    .font(.body)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                 
                 Button(action: { sendMessage() }) {
@@ -1557,12 +1562,14 @@ struct GameView: View {
         }
         
         var body: some View {
-            switch message.type {
-            case .message:
-                HStack(alignment: .top) {
-                    if message.isUser {
-                        Spacer()
-                        Text(cleanContent)
+                switch message.type {
+                case .message:
+                    HStack(alignment: .top) {
+                        if message.isUser {
+                            Spacer()
+                            Text(cleanContent)
+                            .font(.body)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(message.isUser ? levelManager.currentTheme.primary : Color(uiColor: .systemGray5))
@@ -1575,6 +1582,8 @@ struct GameView: View {
                             .padding(.leading, 60)
                     } else {
                         Text(cleanContent)
+                            .font(.body)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(message.isUser ? levelManager.currentTheme.primary : Color(uiColor: .systemGray5))
@@ -1590,10 +1599,11 @@ struct GameView: View {
                 }
                 .padding(.horizontal, 4)
                 
-            case .status:
-                VStack {
-                    Text(cleanContent)
-                        .font(.system(size: isLevelHeader(cleanContent) ? 18 : 14))
+                case .status:
+                    VStack {
+                        Text(cleanContent)
+                        .font(isLevelHeader(cleanContent) ? .title3 : .subheadline)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                         .foregroundColor(isLevelHeader(cleanContent) ? .primary : .gray)
                         .fontWeight(isLevelHeader(cleanContent) ? .bold : .regular)
                         .padding(.vertical, 8)
@@ -1604,26 +1614,27 @@ struct GameView: View {
                 }
                 .frame(maxWidth: .infinity)
                 
-            case .victory:
-                VStack(spacing: 12) {
-                    Text(cleanContent)
-                        .font(.system(size: 16, weight: .bold))
+                case .victory:
+                    VStack(spacing: 12) {
+                        Text(cleanContent)
+                        .font(.headline)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                         .foregroundColor(.white)
                         .padding(.top, 8)
                         .multilineTextAlignment(.center)
                     
-                    if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
-                        Text(victoryMessage)
-                            .font(.system(size: 14))
+                        if let victoryMessage = levelManager.getCurrentLevelContent()?.victoryMessage {
+                            Text(victoryMessage)
+                            .font(.subheadline)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
                     }
                     
-                    Button(action: {
-                        onNextLevel?()
-                    }) {
-                        Text("NEXT_LEVEL")
-                            .font(.system(size: 16, weight: .semibold))
+                        Button(action: { onNextLevel?() }) {
+                            Text("NEXT_LEVEL")
+                            .font(.headline)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                             .foregroundColor(levelManager.currentTheme.primary)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 10)
@@ -1646,7 +1657,8 @@ struct GameView: View {
                         Text(String(format: String(localized: "REPUTATION_CHANGE"),
                                    change > 0 ? "+" : "",
                                    change))
-                            .font(.caption)
+                            .font(.callout)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                             .foregroundColor(change > 0 ? .green : .red)
                     }
                     .padding(.vertical, 4)
