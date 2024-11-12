@@ -274,7 +274,7 @@ struct MenuButton: View {
 }
 
 struct LevelContent: Codable {
-    let number: Int
+    var number: Int // Изменено на var
     let title: String
     let description: String
     let sceneDescription: String
@@ -283,6 +283,7 @@ struct LevelContent: Codable {
     let victoryConditions: [String]
     let victoryMessage: String
 }
+
 
 struct AboutGameView: View {
     @Environment(\.dismiss) private var dismiss
@@ -600,58 +601,99 @@ class LevelService {
     static let shared = LevelService()
     private let baseURL = "https://gg40e4wjm2.execute-api.eu-north-1.amazonaws.com/prod"
     
+    // Структура для декодирования ответа API Gateway
+    struct APIGatewayResponse<T: Codable>: Codable {
+        let statusCode: Int
+        let headers: [String: String]
+        let body: String
+    }
+        
+    
+    // Структура для декодирования ошибок
+    struct APIErrorResponse: Codable {
+        let error: String
+    }
+    
+    
+    
     func fetchLevel(_ number: Int, language: String) async throws -> LevelContent {
-        let url = URL(string: "\(baseURL)/levels")!
+        print("📱 Starting to load level:", number)
+        print("🌐 Fetching level content from API...")
+        print("🌍 Using language:", language)
+        
+        guard let url = URL(string: "https://gg40e4wjm2.execute-api.eu-north-1.amazonaws.com/prod/levels") else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+        }
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body: [String: Any] = [
+        let requestDict = [
             "level": number,
             "language": language
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        ] as [String : Any]
+        
+        let jsonData = try JSONSerialization.data(withJSONObject: requestDict)
+        
+        if let jsonString = String(data: jsonData, encoding: .utf8) {
+            print("📤 Request JSON being sent:", jsonString)
+        }
+        
+        request.httpBody = jsonData
+        
+        print("🌐 Sending request to:", url.absoluteString)
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        // Проверяем HTTP-ответ
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response type"])
-        }
+        if let httpResponse = response as? HTTPURLResponse {
+            print("📥 Response status code:", httpResponse.statusCode)
+            print("📥 Response headers:", httpResponse.allHeaderFields)
+            
+            print("📥 Raw response data length:", data.count, "bytes")
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📥 Response data as string:", responseString)
+            }
+            
+            do {
+                // Сначала декодируем обёртку API Gateway
+                let gatewayResponse = try JSONDecoder().decode(APIGatewayResponse<LevelContent>.self, from: data)
+                        
+                        guard let levelData = gatewayResponse.body.data(using: .utf8) else {
+                            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid body data"])
+                        }
+                        
+                        return try JSONDecoder().decode(LevelContent.self, from: levelData)
+                        
+                    } catch {
+                        print("❌ Decoding error:", error)
+                        throw error
+                    }
+                }
         
-        // Выводим данные для отладки
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("Raw response: \(responseString)")
-        }
-        
-        // Проверяем наличие ошибки в ответе
-        if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
-            throw NSError(
-                domain: "",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "API Error: \(errorResponse.errorMessage)"]
-            )
-        }
-        
-        // Если нет ошибки, пробуем декодировать ответ
-        let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
-        
-        guard let bodyData = apiResponse.body.data(using: .utf8) else {
-            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid body data"])
-        }
-        
-        let levelContent = try JSONDecoder().decode(LevelContent.self, from: bodyData)
-        return levelContent
+        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
     }
 }
 
-// Добавляем структуру для обработки ошибок API
-struct APIErrorResponse: Codable {
-    let errorType: String
-    let errorMessage: String
-    let trace: [String]
+struct APIError: Codable {
+    let message: String
 }
 
+
+struct LevelResponse: Codable {
+    let level: Int
+    let title: String
+    let description: String
+    let code: String
+    let tests: [String]
+    // ... другие поля ...
+}
+
+// Структура для ответа с ошибкой
+struct ErrorResponse: Codable {
+    let error: String
+    let debug: [String: String]?
+}
 class LevelManager: ObservableObject {
     @Published var currentLevel = 1
     @Published var showLevelCompleteAlert = false
