@@ -18,11 +18,17 @@ struct ContentView: View {
                     levelManager: levelManager,
                     startGame: {
                         startLevel = 1
-                        showGame = true
+                        Task {
+                            await levelManager.loadLevel(1)
+                            showGame = true
+                        }
                     },
                     selectLevel: { selectedLevel in
                         startLevel = selectedLevel
-                        showGame = true
+                        Task {
+                            await levelManager.loadLevel(selectedLevel)
+                            showGame = true
+                        }
                     },
                     showGame: $showGame
                 )
