@@ -174,32 +174,44 @@ struct MainMenuView: View {
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 30) {
-                Image("logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 500)
-                    .shadow(color: .black.opacity(0.5), radius: 10)
-                
-                VStack(spacing: 16) {
-                    Button(action: startGame) {
-                        MenuButton(title: "Начать игру", systemImage: "play.fill")
+                            Image("logo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 500)
+                                .shadow(color: .black.opacity(0.5), radius: 10)
+                            
+                            VStack(spacing: 16) {
+                                Button(action: startGame) {
+                                    MenuButton(
+                                        title: String(localized: "START_GAME"),
+                                        systemImage: "play.fill"
+                                    )
+                                }
+                                
+                                Button(action: { showLevelSelect = true }) {
+                                    MenuButton(
+                                        title: String(localized: "SELECT_LEVEL"),
+                                        systemImage: "list.number"
+                                    )
+                                }
+                                
+                                Button(action: { levelManager.showStatistics = true }) {
+                                    MenuButton(
+                                        title: String(localized: "STATISTICS"),
+                                        systemImage: "chart.bar.fill"
+                                    )
+                                }
+                                
+                                Button(action: { showAboutGame = true }) {
+                                    MenuButton(
+                                        title: String(localized: "ABOUT_GAME"),
+                                        systemImage: "info.circle"
+                                    )
+                                }
+                            }
+                        }
+                        .padding()
                     }
-                    
-                    Button(action: { showLevelSelect = true }) {
-                        MenuButton(title: "Выбрать уровень", systemImage: "list.number")
-                    }
-                    
-                    Button(action: { levelManager.showStatistics = true }) {
-                        MenuButton(title: "Статистика", systemImage: "chart.bar.fill")
-                    }
-                    
-                    Button(action: { showAboutGame = true }) {
-                        MenuButton(title: "Об игре", systemImage: "info.circle")
-                    }
-                }
-            }
-            .padding()
-        }
         .sheet(isPresented: $showLevelSelect) {
             LevelSelectView(
                 levelManager: levelManager,
@@ -279,37 +291,31 @@ struct AboutGameView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("О Time Hacker")
+                    Text("ABOUT_TITLE")
                         .font(.title)
                         .bold()
                     
                     Group {
-                        Text("Описание")
+                        Text("ABOUT_DESCRIPTION_TITLE")
                             .font(.headline)
-                        Text("Time Hacker - это игра о социальной инженерии и искусстве убеждения. Путешествуйте через разные эпохи, используя навыки коммуникации для достижения своих целей.")
+                        Text("ABOUT_DESCRIPTION_TEXT")
                     }
                     
                     Group {
-                        Text("Как играть")
+                        Text("ABOUT_HOW_TO_PLAY")
                             .font(.headline)
-                        Text("• Каждый уровень представляет собой диалог с персонажем из определенной эпохи\n• Используйте убеждение, знания и хитрость, чтобы достичь цели\n• Внимательно читайте описание ситуации и реакции персонажа\n• Победите, найдя правильный подход к каждому собеседнику")
+                        Text("ABOUT_HOW_TO_PLAY_TEXT")
                     }
                     
                     Group {
-                        Text("Уровни")
+                        Text("ABOUT_DEVELOPERS")
                             .font(.headline)
-                        Text("Игра содержит 10 уровней, каждый в своей исторической эпохе:\n1. Заря Человечества\n2. Древний Египет\n3. Древняя Греция\n4. Римская Империя\n5. Средневековый Китай\n6. Средневековая Европа\n7. Эпоха Возрождения\n8. Эпоха Просвещения\n9. Индустриальная Эпоха\n10. Современность")
-                    }
-                    
-                    Group {
-                        Text("Разработчики")
-                            .font(.headline)
-                        Text("Создано с ❤️ для всех любителей истории и социальной инженерии")
+                        Text("ABOUT_DEVELOPERS_TEXT")
                     }
                 }
                 .padding()
             }
-            .navigationBarItems(trailing: Button("Закрыть") {
+            .navigationBarItems(trailing: Button("CLOSE") {
                 dismiss()
             })
         }
@@ -337,7 +343,7 @@ struct LevelSelectView: View {
                 
                 ScrollView {
                     VStack(alignment: .leading) {
-                        Text("Выбор уровня")
+                        Text("LEVEL_SELECT_TITLE")
                             .font(.system(size: 40, weight: .bold))
                             .foregroundColor(.white)
                             .padding(.horizontal)
@@ -381,7 +387,7 @@ struct LevelSelectView: View {
                                             
                                             VStack {
                                                 Spacer()
-                                                Text("Уровень \(level)")
+                                                Text("LEVEL \(level)")
                                                     .font(.system(size: 16, weight: .semibold))
                                                     .foregroundColor(.white)
                                                     .padding(.bottom, 10)
@@ -398,7 +404,7 @@ struct LevelSelectView: View {
                         Button(action: { showResetAlert = true }) {
                             HStack {
                                 Image(systemName: "arrow.counterclockwise")
-                                Text("Сбросить прогресс")
+                                Text("RESET_PROGRESS")
                             }
                             .foregroundColor(.red)
                             .padding()
@@ -419,30 +425,34 @@ struct LevelSelectView: View {
                     .font(.title2)
                     .foregroundColor(.white)
             })
-            .alert("Сбросить прогресс?", isPresented: $showResetAlert) {
-                Button("Отмена", role: .cancel) { }
-                Button("Сбросить", role: .destructive) {
+            .alert(String(localized: "RESET_PROGRESS_TITLE"), isPresented: $showResetAlert) {
+                Button(String(localized: "CANCEL"), role: .cancel) { }
+                Button(String(localized: "RESET"), role: .destructive) {
                     levelManager.resetProgress()
                 }
             } message: {
-                Text("Все уровни, кроме первого, будут заблокированы. Статистика прохождения сохранится.")
+                Text("RESET_PROGRESS_MESSAGE")
             }
         }
     }
     
     private func getLevelTitle(_ level: Int) -> String {
+        String(localized: "ERA_\(getEraKey(for: level))")
+    }
+    
+    private func getEraKey(for level: Int) -> String {
         switch level {
-        case 1: return "Заря Человечества"
-        case 2: return "Древний Египет"
-        case 3: return "Древняя Греция"
-        case 4: return "Римская Империя"
-        case 5: return "Средневековый Китай"
-        case 6: return "Средневековая Европа"
-        case 7: return "Эпоха Возрождения"
-        case 8: return "Эпоха Просвещения"
-        case 9: return "Индустриальная Эпоха"
-        case 10: return "Современность"
-        default: return ""
+        case 1: return "DAWN"
+        case 2: return "EGYPT"
+        case 3: return "GREECE"
+        case 4: return "ROME"
+        case 5: return "CHINA"
+        case 6: return "MEDIEVAL"
+        case 7: return "RENAISSANCE"
+        case 8: return "ENLIGHTENMENT"
+        case 9: return "INDUSTRIAL"
+        case 10: return "MODERN"
+        default: return "DAWN"
         }
     }
 }
@@ -843,51 +853,60 @@ struct StatisticsView: View {
     @State private var showingShareSheet = false
     
     private var shareText: String {
-        var text = "🎮 Time Hacker - Мои лучшие результаты:\n\n"
+        let title = String(localized: "SHARE_TITLE")
+        let bestResults = String(localized: "SHARE_BEST_RESULTS")
+        let totalTime = String(localized: "SHARE_TOTAL_TIME")
+        let totalMessages = String(localized: "SHARE_TOTAL_MESSAGES")
+        let totalChars = String(localized: "SHARE_TOTAL_CHARS")
+        let tryBetter = String(localized: "SHARE_TRY_BETTER")
         
-        // Добавляем информацию о лучших прохождениях
-        let sortedBestStats = statistics.bestLevelStats.sorted { $0.key < $1.key }
+        return """
+        🎮 \(title)
         
-        text += """
+        📊 \(bestResults)
+        ⏱️ \(totalTime): \(formatTime(statistics.totalTimeSpent))
+        💬 \(totalMessages): \(statistics.totalMessages)
+        📝 \(totalChars): \(statistics.totalCharacters)
         
-        📊 Моё лучшее прхождение:
-        ⏱️ Общее время игры: \(formatTime(statistics.totalTimeSpent))
-        💬 Всего сообщений: \(statistics.totalMessages)
-        📝 Всего символов: \(statistics.totalCharacters)
-        
-        🎯 Попробуй лучше в Time Hacker!
+        🎯 \(tryBetter)
         """
-        
-        return text
     }
     
     var body: some View {
         NavigationView {
             List {
-                Section(header: Text("Общая статистика")) {
-                    StatRow(title: "Общее время", value: formatTime(statistics.totalTimeSpent))
-                    StatRow(title: "Всего сообщений", value: "\(statistics.totalMessages)")
-                    StatRow(title: "Всего символов", value: "\(statistics.totalCharacters)")
+                Section(header: Text("STATISTICS_GENERAL")) {
+                    StatRow(title: String(localized: "TOTAL_TIME"),
+                           value: formatTime(statistics.totalTimeSpent))
+                    StatRow(title: String(localized: "TOTAL_MESSAGES"),
+                           value: "\(statistics.totalMessages)")
+                    StatRow(title: String(localized: "CHARACTERS_TYPED"),
+                           value: "\(statistics.totalCharacters)")
                 }
                 
-                Section(header: Text("Лучшее время прохождения")) {
+                Section(header: Text("STATISTICS_BEST_TIMES")) {
                     ForEach(1...10, id: \.self) { level in
                         if let bestStats = statistics.bestLevelStats[level] {
-                            Section(header: Text("Уровень \(level)")) {
-                                StatRow(title: "Лучшее время", value: formatTime(bestStats.timeSpent))
-                                StatRow(title: "Сообщений", value: "\(bestStats.messagesCount)")
-                                StatRow(title: "Дата прохождения", value: formatDate(bestStats.endTime))
+                            Section(header: Text("LEVEL \(level)")) {
+                                StatRow(title: String(localized: "BEST_TIME"),
+                                       value: formatTime(bestStats.timeSpent))
+                                StatRow(title: String(localized: "STATISTICS_MESSAGES"),
+                                       value: "\(bestStats.messagesCount)")
+                                StatRow(title: String(localized: "COMPLETION_DATE"),
+                                       value: formatDate(bestStats.endTime))
                             }
                         }
                     }
                 }
                 
-                Section(header: Text("Текущая сессия")) {
+                Section(header: Text("CURRENT_SESSION")) {
                     ForEach(1...10, id: \.self) { level in
                         if let levelStats = statistics.levelsStats[level] {
-                            Section(header: Text("Уровень \(level)")) {
-                                StatRow(title: "Время", value: formatTime(levelStats.timeSpent))
-                                StatRow(title: "Сообщений", value: "\(levelStats.messagesCount)")
+                            Section(header: Text("LEVEL \(level)")) {
+                                StatRow(title: String(localized: "STATISTICS_TIME"),
+                                       value: formatTime(levelStats.timeSpent))
+                                StatRow(title: String(localized: "STATISTICS_MESSAGES"),
+                                       value: "\(levelStats.messagesCount)")
                             }
                         }
                     }
@@ -897,7 +916,7 @@ struct StatisticsView: View {
                     Button(action: { showingShareSheet = true }) {
                         HStack {
                             Image(systemName: "square.and.arrow.up")
-                            Text("Поделиться результатами")
+                            Text("SHARE_RESULTS")
                         }
                     }
                     
@@ -906,24 +925,24 @@ struct StatisticsView: View {
                     }) {
                         HStack {
                             Image(systemName: "arrow.counterclockwise")
-                            Text("Начать сначала")
+                            Text("START_OVER")
                         }
                         .foregroundColor(.red)
                     }
                 }
             }
-            .navigationTitle("Статистика игры")
-            .navigationBarItems(trailing: Button("Закрыть") {
+            .navigationTitle(String(localized: "STATISTICS_TITLE"))
+            .navigationBarItems(trailing: Button(String(localized: "CLOSE")) {
                 showGame = false
                 dismiss()
             })
-            .alert("Начать сначала?", isPresented: $showingRestartAlert) {
-                Button("Отмена", role: .cancel) { }
-                Button("Начать", role: .destructive) {
+            .alert(String(localized: "START_OVER_TITLE"), isPresented: $showingRestartAlert) {
+                Button(String(localized: "CANCEL"), role: .cancel) { }
+                Button(String(localized: "START_OVER_CONFIRM"), role: .destructive) {
                     restartGame()
                 }
             } message: {
-                Text("Вы уверены, что хотите начать игру сначала? Весь прогресс будет потерян.")
+                Text("START_OVER_MESSAGE")
             }
             .sheet(isPresented: $showingShareSheet) {
                 ShareSheet(activityItems: [shareText])
@@ -1004,12 +1023,9 @@ struct GameView: View {
         VStack(spacing: 0) {
             // Top bar with level indicator and restart button
             HStack {
-                Text("Уровень \(levelManager.currentLevel)")
+                Text(String(localized: "LEVEL \(levelManager.currentLevel)"))
                     .font(.title2)
                     .bold()
-                Text("из 10")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
                 Spacer()
                 ReputationIndicator(reputation: levelManager.reputation)
                 Button(action: {
@@ -1089,7 +1105,7 @@ struct GameView: View {
             
             // Bottom input field
             HStack(spacing: 12) {
-                TextField("Введите сообщение...", text: $messageText)
+                TextField(String(localized: "ENTER_MESSAGE"), text: $messageText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                 
                 Button(action: { sendMessage() }) {
@@ -1102,15 +1118,16 @@ struct GameView: View {
             .padding()
             .background(Color(uiColor: .systemBackground))
         }
-        .alert("Уровень пройден!", isPresented: $levelManager.showLevelCompleteAlert) {
-            Button("Следующий уровень") {
+        .alert(String(localized: "LEVEL_COMPLETE"), isPresented: $levelManager.showLevelCompleteAlert) {
+            Button(String(localized: "NEXT_LEVEL")) {
                 startNextLevel()
             }
         } message: {
-            Text("Поздравляем! Вы успешно прошли уровень \(levelManager.currentLevel)")
+            Text(String(format: String(localized: "LEVEL_COMPLETE"), levelManager.currentLevel))
         }
-        .alert("Ошибка", isPresented: .constant(levelManager.errorMessage != nil)) {
-            Button("OK") {
+        
+        .alert(String(localized: "ERROR"), isPresented: .constant(levelManager.errorMessage != nil)) {
+            Button(String(localized: "OK")) {
                 levelManager.errorMessage = nil
             }
         } message: {
@@ -1425,18 +1442,18 @@ struct GameView: View {
         if let aiError = error as? AIService.AIError {
             switch aiError {
             case .apiError(let message):
-                levelManager.errorMessage = "Ошибка API: \(message)"
+                levelManager.errorMessage = String(format: String(localized: "API_ERROR"), message)
             case .networkError(_):
-                levelManager.errorMessage = "Ошибка сети. Проверьте подключение к интернету."
+                levelManager.errorMessage = String(localized: "NETWORK_ERROR")
             case .invalidResponse:
-                levelManager.errorMessage = "Неверный ответ от сервера."
+                levelManager.errorMessage = String(localized: "INVALID_RESPONSE")
             case .overloaded:
-                levelManager.errorMessage = "Сервис перегружен. Попробуйте позже."
+                levelManager.errorMessage = String(localized: "SERVICE_OVERLOADED")
             case .bothProvidersFailed(let details):
-                levelManager.errorMessage = "Оба сервиса недоступны: \(details)"
+                levelManager.errorMessage = String(format: String(localized: "BOTH_PROVIDERS_FAILED"), details)
             }
         } else {
-            levelManager.errorMessage = "Неизвестная ошибка: \(error.localizedDescription)"
+            levelManager.errorMessage = String(format: String(localized: "UNKNOWN_ERROR"), error.localizedDescription)
         }
     }
     
@@ -1460,7 +1477,6 @@ struct GameView: View {
             self.onNextLevel = onNextLevel
         }
         
-        // Добавляем вычисляемое свойство для очищенного контента
         private var cleanContent: String {
             formatMessageForDisplay(message.content)
         }
@@ -1471,7 +1487,8 @@ struct GameView: View {
         }
         
         private func isLevelHeader(_ content: String) -> Bool {
-            content.starts(with: "Уровень") && content.contains(":")
+            // Проверяем начинается ли с локализованного "LEVEL" и содержит ":"
+            return content.starts(with: String(localized: "LEVEL")) && content.contains(":")
         }
         
         var body: some View {
@@ -1540,7 +1557,7 @@ struct GameView: View {
                     Button(action: {
                         onNextLevel?()
                     }) {
-                        Text("Следующий уровень")
+                        Text("NEXT_LEVEL")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(levelManager.currentTheme.primary)
                             .padding(.horizontal, 20)
@@ -1561,7 +1578,9 @@ struct GameView: View {
                     HStack {
                         Image(systemName: change > 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                             .foregroundColor(change > 0 ? .green : .red)
-                        Text("Репутация \(change > 0 ? "+" : "")\(change)")
+                        Text(String(format: String(localized: "REPUTATION_CHANGE"),
+                                   change > 0 ? "+" : "",
+                                   change))
                             .font(.caption)
                             .foregroundColor(change > 0 ? .green : .red)
                     }
@@ -1572,7 +1591,6 @@ struct GameView: View {
         }
     }
 }
-
 #Preview {
     ContentView()
 }

@@ -1,11 +1,4 @@
-//
-//  Reputation.swift
-//  Time Hacker
-//
-//  Created by Vladimir Milakov on 08.11.2024.
-//
-
-
+import Foundation
 import SwiftUI
 
 struct Reputation {
@@ -24,32 +17,36 @@ struct Reputation {
         default: return .trusting
         }
     }
+}
+
+enum ReputationLevel: String {
+    case hostile = "REPUTATION_HOSTILE"
+    case suspicious = "REPUTATION_SUSPICIOUS"
+    case neutral = "REPUTATION_NEUTRAL"
+    case friendly = "REPUTATION_FRIENDLY"
+    case trusting = "REPUTATION_TRUSTING"
     
-    enum ReputationLevel: String {
-        case hostile = "Враждебное"
-        case suspicious = "Подозрительное"
-        case neutral = "Нейтральное"
-        case friendly = "Дружелюбное"
-        case trusting = "Доверительное"
-        
-        var color: Color {
-            switch self {
-            case .hostile: return .red
-            case .suspicious: return .orange
-            case .neutral: return .yellow
-            case .friendly: return .green
-            case .trusting: return .blue
-            }
+    var localizedName: String {
+        NSLocalizedString(self.rawValue, comment: "")
+    }
+    
+    var color: Color {
+        switch self {
+        case .hostile: return .red
+        case .suspicious: return .orange
+        case .neutral: return .yellow
+        case .friendly: return .green
+        case .trusting: return .blue
         }
-        
-        var icon: String {
-            switch self {
-            case .hostile: return "xmark.circle.fill"
-            case .suspicious: return "exclamationmark.circle.fill"
-            case .neutral: return "minus.circle.fill"
-            case .friendly: return "checkmark.circle.fill"
-            case .trusting: return "star.circle.fill"
-            }
+    }
+    
+    var icon: String {
+        switch self {
+        case .hostile: return "xmark.circle.fill"
+        case .suspicious: return "exclamationmark.circle.fill"
+        case .neutral: return "minus.circle.fill"
+        case .friendly: return "checkmark.circle.fill"
+        case .trusting: return "star.circle.fill"
         }
     }
 }
@@ -62,7 +59,7 @@ struct ReputationIndicator: View {
             Image(systemName: reputation.level.icon)
                 .foregroundColor(reputation.level.color)
             
-            Text(reputation.level.rawValue)
+            Text(reputation.level.localizedName) // Используем localizedName вместо rawValue
                 .font(.caption)
                 .foregroundColor(reputation.level.color)
         }

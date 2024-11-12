@@ -49,16 +49,16 @@ class AIService {
             } catch AIError.overloaded {
                 attempts += 1
                 if attempts < maxRetries {
-                    print("API перегружен. Повторная попытка \(attempts)/\(maxRetries)...")
+                    print("API overloaded - retrying \(attempts)/\(maxRetries)...")
                     try await Task.sleep(nanoseconds: currentDelay)
                     currentDelay *= 2
                     continue
                 }
-                throw AIError.apiError("Сервис перегружен. Попробуйте позже.")
+                throw AIError.apiError("Service overloaded.")
             }
         }
         
-        throw AIError.apiError("Превышено количество попыток.")
+        throw AIError.apiError("Too many trys.")
     }
     
     private func sendMessageAttempt(messages: [ChatMessage]) async throws -> String {
@@ -74,18 +74,18 @@ class AIService {
             "max_tokens": 1024
         ] as [String : Any]
         
-        print("\n=== ОТПРАВКА ЗАПРОСА ===")
+        print("\n=== SENT REQUEST ===")
         let jsonData = try JSONSerialization.data(withJSONObject: body)
         print(String(data: jsonData, encoding: .utf8) ?? "")
         request.httpBody = jsonData
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        print("\n=== ОТВЕТ СЕРВЕРА ===")
+        print("\n=== SERVER RESPONSE ===")
         if let httpResponse = response as? HTTPURLResponse {
-            print("HTTP статус код: \(httpResponse.statusCode)")
+            print("HTTP status code: \(httpResponse.statusCode)")
         }
-        print("Данные ответа: \(String(data: data, encoding: .utf8) ?? "")")
+        print("Answer data: \(String(data: data, encoding: .utf8) ?? "")")
         
         let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
         
@@ -99,7 +99,7 @@ class AIService {
         
         if apiResponse.statusCode != 200 {
             if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: bodyData) {
-                print("Ошибка API: \(errorResponse)")
+                print("API Error: \(errorResponse)")
                 if errorResponse.error == "Both providers failed" {
                     throw AIError.bothProvidersFailed("""
                         Anthropic: \(errorResponse.anthropicError ?? "unknown")
@@ -115,7 +115,7 @@ class AIService {
             throw AIError.invalidResponse
         }
         
-        print("Ответ получен от провайдера: \(messageResponse.provider ?? "unknown")")
+        print("Provider: \(messageResponse.provider ?? "unknown")")
         
         return messageResponse.content
             .replacingOccurrences(of: "\\n", with: "\n")
