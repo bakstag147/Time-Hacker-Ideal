@@ -531,6 +531,7 @@ struct GameStatistics: Codable {
         levelsStats.values.reduce(0) { $0 + $1.totalCharacters }
     }
     
+    @MainActor
     mutating func updateBestStats(level: Int, stats: LevelStatistics) {
         if let currentBest = bestLevelStats[level] {
             if stats.timeSpent < currentBest.timeSpent {
@@ -543,8 +544,7 @@ struct GameStatistics: Codable {
         }
     }
     
-    // Убрали private модификатор
-    mutating func save() {
+    func save() {
         if let encoded = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(encoded, forKey: "GameStatistics")
         }
@@ -558,7 +558,6 @@ struct GameStatistics: Codable {
         return GameStatistics()
     }
 }
-
 // MARK: - API Models
 struct AnthropicRequest: Codable {
     let model: String
@@ -736,6 +735,7 @@ class LevelManager: ObservableObject {
         return currentLevelContent
     }
     
+    @MainActor
     func resetProgress() {
         levelProgress = LevelProgress(unlockedLevels: [1])
         levelProgress.save()
@@ -778,11 +778,11 @@ class LevelManager: ObservableObject {
         reputation = Reputation()
     }
     
+    @MainActor
     func unlockNextLevel() {
         let nextLevel = currentLevel + 1
         if nextLevel <= 10 {
-            levelProgress.unlockedLevels.insert(nextLevel)
-            levelProgress.save()
+            levelProgress.unlockLevel(nextLevel)
             objectWillChange.send()
         }
     }
@@ -796,19 +796,19 @@ class LevelManager: ObservableObject {
         currentCharactersCount += message.count
     }
     
+    @MainActor
     func nextLevel() async {
         completedLevel()
         unlockNextLevel()
         
         if currentLevel >= 10 {
-            await MainActor.run {
-                showStatistics = true
-            }
+            showStatistics = true
         } else {
             await loadLevel(currentLevel + 1)
         }
     }
     
+    @MainActor
     func completedLevel() {
         let stats = LevelStatistics(
             timeSpent: Date().timeIntervalSince(currentLevelStartTime),
@@ -817,6 +817,8 @@ class LevelManager: ObservableObject {
             startTime: currentLevelStartTime,
             endTime: Date()
         )
+        
+        // Обновляем статистику в главном потоке
         gameStatistics.levelsStats[currentLevel] = stats
         gameStatistics.updateBestStats(level: currentLevel, stats: stats)
         
@@ -824,9 +826,11 @@ class LevelManager: ObservableObject {
             showStatistics = true
         }
         
+        // Сохраняем статистику
         gameStatistics.save()
     }
     
+    @MainActor
     func resetGame() {
         currentLevel = 1
         gameStatistics = GameStatistics()
@@ -848,41 +852,41 @@ class LevelManager: ObservableObject {
     }
 }
 
-class ChatContextManager: ObservableObject {
-    @Published private var messages: [ChatMessage] = []
-    private let contextKey = "chatContext"
-    private let systemPromptLoader = SystemPromptLoader.shared
-    
-    func getFormattedContext() -> [ChatMessage] {
-        return messages
-    }
-
-    func addMessage(_ message: ChatMessage) {
-        if message.role == .system && messages.contains(where: { $0.role == .system }) {
-            return
+    @MainActor
+    class ChatContextManager: ObservableObject {
+        @Published private var messages: [ChatMessage] = []
+        private let contextKey = "chatContext"
+        private let systemPromptLoader = SystemPromptLoader.shared
+        
+        func getFormattedContext() -> [ChatMessage] {
+            return messages
         }
-        messages.append(message)
-        saveContext()
-    }
-    
-    func clearContext() {
-        messages.removeAll()
-        UserDefaults.standard.removeObject(forKey: contextKey)
-    }
-    
-    // Новый метод для инициализации с системным промптом
-    func initializeContext() async throws {
-        let systemPrompt = try await SystemPromptLoader.shared.loadSystemPrompt()
-        
-        // Очищаем предыдущий контекст
-        messages.removeAll()
-        
-        // Добавляем системный промпт как первое сообщение
-        await MainActor.run {
-            messages = [ChatMessage(role: .system, content: systemPrompt)]
+
+        func addMessage(_ message: ChatMessage) {
+            if message.role == .system && messages.contains(where: { $0.role == .system }) {
+                return
+            }
+            messages.append(message)
             saveContext()
         }
-    }
+        
+        func clearContext() {
+            messages.removeAll()
+            UserDefaults.standard.removeObject(forKey: contextKey)
+        }
+        
+        func initializeContext() async throws {
+            let systemPrompt = try await SystemPromptLoader.shared.loadSystemPrompt()
+            
+            await MainActor.run {
+                // Очищаем предыдущий контекст
+                messages.removeAll()
+                
+                // Добавляем системный промпт как первое сообщение
+                messages = [ChatMessage(role: .system, content: systemPrompt)]
+                saveContext()
+            }
+        }
     
     // Остальные методы без изменений
     private func saveContext() {
@@ -1093,6 +1097,10 @@ struct GameView: View {
             // Top bar with level indicator and restart button
             HStack {
                 Button(action: {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                  to: nil,
+                                                  from: nil,
+                                                  for: nil) // Скрываем клавиатуру
                     showGame = false
                 }) {
                     Image(systemName: "house.fill")
@@ -1280,21 +1288,23 @@ struct GameView: View {
         return (cleanResponse, newReputation)
     }
     
+    @MainActor
     private func loadInitialMessage() async {
         if let level = levelManager.getCurrentLevelContent() {
-            uiMessages = [
-                Message(
-                    content: String(format: NSLocalizedString("LEVEL", comment: ""), level.number) + ": \(level.title)",
-                    isUser: false,
-                    type: .status
-                ),
-                Message(content: level.description, isUser: false, type: .status),
-                Message(content: level.sceneDescription, isUser: false, type: .status),
-                Message(content: level.initialMessage, isUser: false, type: .message)
-            ]
+            withAnimation {
+                uiMessages = [
+                    Message(
+                        content: String(format: NSLocalizedString("LEVEL", comment: ""), level.number) + ": \(level.title)",
+                        isUser: false,
+                        type: .status
+                    ),
+                    Message(content: level.description, isUser: false, type: .status),
+                    Message(content: level.sceneDescription, isUser: false, type: .status),
+                    Message(content: level.initialMessage, isUser: false, type: .message)
+                ]
+            }
             
             do {
-                // Получаем системный промпт из контекста
                 let systemPrompt = try await SystemPromptLoader.shared.loadSystemPrompt()
                 
                 let combinedPrompt = """
@@ -1306,8 +1316,7 @@ struct GameView: View {
                 
                 print("📝 Combined Prompt:", combinedPrompt)
                 
-                // Обновляем системное сообщение в контексте
-                chatContext.clearContext() // Очищаем старый контекст
+                chatContext.clearContext()
                 chatContext.addMessage(ChatMessage(role: .system, content: combinedPrompt))
             } catch {
                 print("❌ Error loading system prompt:", error)
@@ -1323,13 +1332,14 @@ struct GameView: View {
             await loadLevelAndInitialize()
         }
     }
+
     @MainActor
     private func loadLevelAndInitialize() async {
         do {
             // Загружаем уровень
             await levelManager.loadLevel(levelManager.currentLevel)
             
-            // Инициализируем контекст с системным промптом
+            // Инициализируем контекст напрямую, так как мы уже в @MainActor
             try await chatContext.initializeContext()
             
             // Загружаем начальное сообщение уровня

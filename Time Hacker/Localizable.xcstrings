@@ -1013,13 +1013,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Start Game"
+            "value" : "New Game"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "Начать игру"
+            "state" : "needs_review",
+            "value" : "Новая игра"
           }
         }
       }

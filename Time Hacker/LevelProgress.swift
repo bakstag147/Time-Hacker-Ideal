@@ -17,9 +17,22 @@ struct LevelProgress: Codable {
         self.lastPlayedLevel = lastPlayedLevel
     }
     
+    @MainActor
     mutating func updateLastPlayed(_ level: Int) {
         lastPlayedLevel = level
         save()
+    }
+    
+    @MainActor
+    mutating func unlockLevel(_ level: Int) {
+        unlockedLevels.insert(level)
+        save()
+    }
+    
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: "levelProgress")
+        }
     }
     
     static func load() -> LevelProgress {
@@ -28,11 +41,5 @@ struct LevelProgress: Codable {
             return progress
         }
         return LevelProgress(unlockedLevels: [1], lastPlayedLevel: 1)
-    }
-    
-    func save() {
-        if let data = try? JSONEncoder().encode(self) {
-            UserDefaults.standard.set(data, forKey: "levelProgress")
-        }
     }
 }
