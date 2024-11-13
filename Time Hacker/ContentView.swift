@@ -174,44 +174,59 @@ struct MainMenuView: View {
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 30) {
-                            Image("logo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 500)
-                                .shadow(color: .black.opacity(0.5), radius: 10)
-                            
-                            VStack(spacing: 16) {
-                                Button(action: startGame) {
-                                    MenuButton(
-                                        title: String(localized: "START_GAME"),
-                                        systemImage: "play.fill"
-                                    )
-                                }
-                                
-                                Button(action: { showLevelSelect = true }) {
-                                    MenuButton(
-                                        title: String(localized: "SELECT_LEVEL"),
-                                        systemImage: "list.number"
-                                    )
-                                }
-                                
-                                Button(action: { levelManager.showStatistics = true }) {
-                                    MenuButton(
-                                        title: String(localized: "STATISTICS"),
-                                        systemImage: "chart.bar.fill"
-                                    )
-                                }
-                                
-                                Button(action: { showAboutGame = true }) {
-                                    MenuButton(
-                                        title: String(localized: "ABOUT_GAME"),
-                                        systemImage: "info.circle"
-                                    )
-                                }
+                Image("logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 500)
+                    .shadow(color: .black.opacity(0.5), radius: 10)
+                
+                VStack(spacing: 16) {
+                    // Показываем кнопку "Продолжить" только если открыто больше одного уровня
+                    if levelManager.levelProgress.unlockedLevels.count > 1 {
+                        Button(action: {
+                            Task {
+                                await levelManager.loadLevel(levelManager.levelProgress.lastPlayedLevel)
+                                showGame = true
                             }
+                        }) {
+                            MenuButton(
+                                title: String(localized: "CONTINUE_GAME"),
+                                systemImage: "arrow.forward.circle.fill"
+                            )
                         }
-                        .padding()
                     }
+                    
+                    Button(action: startGame) {
+                        MenuButton(
+                            title: String(localized: "START_GAME"),
+                            systemImage: "play.fill"
+                        )
+                    }
+                    
+                    Button(action: { showLevelSelect = true }) {
+                        MenuButton(
+                            title: String(localized: "SELECT_LEVEL"),
+                            systemImage: "list.number"
+                        )
+                    }
+                    
+                    Button(action: { levelManager.showStatistics = true }) {
+                        MenuButton(
+                            title: String(localized: "STATISTICS"),
+                            systemImage: "chart.bar.fill"
+                        )
+                    }
+                    
+                    Button(action: { showAboutGame = true }) {
+                        MenuButton(
+                            title: String(localized: "ABOUT_GAME"),
+                            systemImage: "info.circle"
+                        )
+                    }
+                }
+            }
+            .padding()
+        }
         .sheet(isPresented: $showLevelSelect) {
             LevelSelectView(
                 levelManager: levelManager,
@@ -728,32 +743,33 @@ class LevelManager: ObservableObject {
     }
     
     @MainActor
-        func loadLevel(_ level: Int) async {
-            print("📱 Starting to load level:", level)
-            isLoading = true
-            errorMessage = nil
+    func loadLevel(_ level: Int) async {
+        print("📱 Starting to load level:", level)
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            print("🌐 Fetching level content from API...")
+            let language = Locale.getSupportedLanguage()
+            print("🌍 Using language:", language)
             
-            do {
-                print("🌐 Fetching level content from API...")
-                let language = Locale.getSupportedLanguage()
-                print("🌍 Using language:", language)
-                
-                let content = try await LevelService.shared.fetchLevel(level, language: language)
-                print("✅ Successfully fetched level content:", content)
-                
-                self.currentLevel = level
-                self.currentLevelContent = content
-                self.currentTheme = LevelTheme.forLevel(level)
-                self.resetLevelStats()
-                print("✅ Level content updated successfully")
-                
-            } catch {
-                print("❌ Error loading level:", error)
-                self.errorMessage = "Error: \(error.localizedDescription)"
-            }
+            let content = try await LevelService.shared.fetchLevel(level, language: language)
+            print("✅ Successfully fetched level content:", content)
             
-            isLoading = false  // Завершаем загрузку в любом случае
+            self.currentLevel = level
+            self.currentLevelContent = content
+            self.currentTheme = LevelTheme.forLevel(level)
+            self.resetLevelStats()
+            self.levelProgress.updateLastPlayed(level) // Добавляем эту строку
+            print("✅ Level content updated successfully")
+            
+        } catch {
+            print("❌ Error loading level:", error)
+            self.errorMessage = "Error: \(error.localizedDescription)"
         }
+        
+        isLoading = false
+    }
     
     func resetLevelStats() {
         currentLevelStartTime = Date()
@@ -1076,22 +1092,35 @@ struct GameView: View {
         VStack(spacing: 0) {
             // Top bar with level indicator and restart button
             HStack {
-                Text(String(localized: "LEVEL \(levelManager.currentLevel)"))
-                    .font(.title2)
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
-                    .bold()
-                Spacer()
-                ReputationIndicator(reputation: levelManager.reputation)
                 Button(action: {
-                    levelManager.resetLevelStats()
-                    chatContext.clearContext()
-                    Task {
-                        await loadLevelAndInitialize()
-                    }
+                    showGame = false
                 }) {
-                    Image(systemName: "arrow.counterclockwise.circle.fill")
+                    Image(systemName: "house.fill")
                         .font(.title2)
                         .foregroundColor(levelManager.currentTheme.primary)
+                }
+                
+                Spacer()
+                
+                Text(String(localized: "LEVEL \(levelManager.currentLevel)"))
+                    .font(.title2)
+                    .bold()
+                
+                Spacer()
+                
+                HStack(spacing: 16) {
+                    ReputationIndicator(reputation: levelManager.reputation)
+                    Button(action: {
+                        levelManager.resetLevelStats()
+                        chatContext.clearContext()
+                        Task {
+                            await loadLevelAndInitialize()
+                        }
+                    }) {
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(levelManager.currentTheme.primary)
+                    }
                 }
             }
             .padding()
