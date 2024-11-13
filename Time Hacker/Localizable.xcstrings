@@ -228,6 +228,9 @@
         }
       }
     },
+    "Contact Support" : {
+
+    },
     "CONTINUE_GAME" : {
       "localizations" : {
         "en" : {
@@ -485,6 +488,9 @@
         }
       }
     },
+    "Legal" : {
+
+    },
     "LEVEL" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -597,6 +603,9 @@
         }
       }
     },
+    "milakowladimir@gmail.com" : {
+
+    },
     "NETWORK_ERROR" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -664,6 +673,9 @@
           }
         }
       }
+    },
+    "Privacy Policy" : {
+
     },
     "REPUTATION" : {
       "extractionState" : "manual",
@@ -1243,6 +1255,9 @@
           }
         }
       }
+    },
+    "Version" : {
+
     }
   },
   "version" : "1.0"

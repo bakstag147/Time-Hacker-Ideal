@@ -309,41 +309,76 @@ struct LevelContent: Codable {
 
 
 struct AboutGameView: View {
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("ABOUT_TITLE")
-                        .font(.title)
-                        .bold()
-                    
-                    Group {
-                        Text("ABOUT_DESCRIPTION_TITLE")
-                            .font(.headline)
-                        Text("ABOUT_DESCRIPTION_TEXT")
-                    }
-                    
-                    Group {
-                        Text("ABOUT_HOW_TO_PLAY")
-                            .font(.headline)
-                        Text("ABOUT_HOW_TO_PLAY_TEXT")
-                    }
-                    
-                    Group {
-                        Text("ABOUT_DEVELOPERS")
-                            .font(.headline)
-                        Text("ABOUT_DEVELOPERS_TEXT")
-                    }
-                }
-                .padding()
-            }
-            .navigationBarItems(trailing: Button("CLOSE") {
-                dismiss()
-            })
-        }
-    }
+   @Environment(\.dismiss) private var dismiss
+   private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+   
+   var body: some View {
+       NavigationView {
+           ScrollView {
+               VStack(alignment: .leading, spacing: 20) {
+                   Text("ABOUT_TITLE")
+                       .font(.title)
+                       .bold()
+                   
+                   Group {
+                       Text("ABOUT_DESCRIPTION_TITLE")
+                           .font(.headline)
+                       Text("ABOUT_DESCRIPTION_TEXT")
+                   }
+                   
+                   Group {
+                       Text("ABOUT_HOW_TO_PLAY")
+                           .font(.headline)
+                       Text("ABOUT_HOW_TO_PLAY_TEXT")
+                   }
+                   
+                   Group {
+                       Text("ABOUT_DEVELOPERS")
+                           .font(.headline)
+                       Text("ABOUT_DEVELOPERS_TEXT")
+                   }
+                   
+                   // Секция с правовой информацией
+                   Group {
+                       Text("Legal")
+                           .font(.headline)
+                       
+                       VStack(alignment: .leading, spacing: 12) {
+                           Link(destination: URL(string: "https://github.com/bakstag147/Time-Hacker-Ideal/blob/main/privacy.md")!) {
+                               HStack {
+                                   Text("Privacy Policy")
+                                   Spacer()
+                                   Image(systemName: "arrow.up.right.square")
+                                       .foregroundColor(.blue)
+                               }
+                           }
+                           
+                           Link(destination: URL(string: "mailto:milakowladimir@gmail.com")!) {
+                               HStack {
+                                   Text("Contact Support")
+                                   Spacer()
+                                   Text("milakowladimir@gmail.com")
+                                       .foregroundColor(.gray)
+                               }
+                           }
+                           
+                           HStack {
+                               Text("Version")
+                               Spacer()
+                               Text(version)
+                                   .foregroundColor(.gray)
+                           }
+                       }
+                       .padding(.vertical, 4)
+                   }
+               }
+               .padding()
+           }
+           .navigationBarItems(trailing: Button("CLOSE") {
+               dismiss()
+           })
+       }
+   }
 }
 
 
