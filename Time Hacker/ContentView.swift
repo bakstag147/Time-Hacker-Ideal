@@ -476,11 +476,6 @@ struct LevelSelectView: View {
 }
 
 // MARK: - Models
-enum MessageType {
-    case message
-    case status
-    case victory
-}
 
 struct Message: Identifiable, Equatable {
     let id = UUID()
@@ -594,11 +589,6 @@ struct AnthropicUsage: Codable {
     }
 }
 
-enum AnthropicError: Error {
-    case invalidResponse
-    case apiError(String)
-    case networkError(Error)
-}
 
 // MARK: - Services
 
@@ -695,21 +685,6 @@ struct APIError: Codable {
     let message: String
 }
 
-
-struct LevelResponse: Codable {
-    let level: Int
-    let title: String
-    let description: String
-    let code: String
-    let tests: [String]
-    // ... другие поля ...
-}
-
-// Структура для ответа с ошибкой
-struct ErrorResponse: Codable {
-    let error: String
-    let debug: [String: String]?
-}
 class LevelManager: ObservableObject {
     @Published var currentLevel = 1
     @Published var showLevelCompleteAlert = false
