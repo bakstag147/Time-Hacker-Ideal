@@ -163,6 +163,11 @@ struct MainMenuView: View {
     @State private var showAboutGame = false
     @Binding var showGame: Bool
     
+    // Определяем, является ли устройство маленьким (iPhone SE и подобные)
+    private var isSmallDevice: Bool {
+        UIScreen.main.bounds.height < 700
+    }
+    
     var body: some View {
         ZStack {
             Image("bgmenu")
@@ -173,14 +178,15 @@ struct MainMenuView: View {
             Color.black.opacity(0.3)
                 .edgesIgnoringSafeArea(.all)
             
-            VStack(spacing: 30) {
+            VStack(spacing: isSmallDevice ? 20 : 30) {
                 Image("logo")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 500)
                     .shadow(color: .black.opacity(0.5), radius: 10)
+                    .padding(.top, isSmallDevice ? -40 : 0)
                 
-                VStack(spacing: 16) {
+                VStack(spacing: isSmallDevice ? 12 : 16) {
                     // Показываем кнопку "Продолжить" только если открыто больше одного уровня
                     if levelManager.levelProgress.unlockedLevels.count > 1 {
                         Button(action: {
@@ -256,7 +262,7 @@ struct MenuButton: View {
                 .font(.title3)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             Text(title)
-                .font(.title3) // Заменяем .mintysis(size: 24)
+                .font(.title3)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         }
         .foregroundColor(.white)
